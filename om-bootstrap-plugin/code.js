@@ -7994,21 +7994,26 @@ async function buildTabs() {
       return { bg: null, text, border: null, indicator: state === 'Active' ? required['brand/primary'] : null };
     }
     if (style === 'Boxy') {
-      const bg =
-        state === 'Active' ? required['surface/card'] :
-        state === 'Hover'  ? required['state/disabled-bg'] :
-                              null;
-      const text = state === 'Active' ? required['text/primary'] : required['text/secondary'];
-      return { bg, text, border: state === 'Active' ? required['border/default'] : null, indicator: null };
+      // Active = brand orange filled pill (white text on orange).
+      // Hover  = brand-subtle / muted peach tint so it stands out against
+      //          either page surface or a Pill-style grey container.
+      if (state === 'Active') {
+        return { bg: required['brand/primary'], text: required['brand/on-primary'] || required['surface/card'], border: required['brand/primary'], indicator: null };
+      }
+      if (state === 'Hover') {
+        const hoverBg = required['brand/primary-muted'] || required['brand/primary-subtle'] || required['state/disabled-bg'];
+        return { bg: hoverBg, text: required['brand/primary'], border: null, indicator: null };
+      }
+      return { bg: null, text: required['text/secondary'], border: null, indicator: null };
     }
     // Pill — soft, surface-toned (active = white pill on grey container, brand text + counter)
     const bg =
       state === 'Active' ? required['surface/card'] :
-      state === 'Hover'  ? required['state/disabled-bg'] :
+      state === 'Hover'  ? required['brand/primary-muted'] || required['brand/primary-subtle'] || required['state/disabled-bg'] :
                             null;
     const text =
       state === 'Active' ? required['brand/primary'] :
-      state === 'Hover'  ? required['text/primary'] :
+      state === 'Hover'  ? required['brand/primary'] :
                             required['text/secondary'];
     return { bg, text, border: null, indicator: null };
   }

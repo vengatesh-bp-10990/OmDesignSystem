@@ -4384,11 +4384,13 @@ async function buildTooltip() {
     outer.fills = [];
     outer.clipsContent = false;
 
-    // Bubble — VERTICAL when heading or action present (multi-row), else HORIZONTAL.
+    // Bubble — VERTICAL when heading present OR action is Button Left (stacked layout).
+    // Button Right keeps bubble HORIZONTAL: [icon | message | button] all centered vertically.
     const bubble = figma.createFrame();
     bubble.name = 'Bubble';
     const hasAction = action === 'Button Left' || action === 'Button Right';
-    const stacked = hasHeading || hasAction;
+    const actionRight = action === 'Button Right';
+    const stacked = hasHeading || action === 'Button Left';
     bubble.layoutMode = stacked ? 'VERTICAL' : 'HORIZONTAL';
     bubble.primaryAxisSizingMode = 'AUTO';
     bubble.counterAxisSizingMode = 'AUTO';
@@ -4485,23 +4487,12 @@ async function buildTooltip() {
     labelHost.appendChild(label);
     try { label.layoutSizingHorizontal = 'FIXED'; label.layoutSizingVertical = 'HUG'; } catch (e) {}
 
-    // Optional Ghost button — placed inside rightCol so it aligns to message's left
+    // Optional Ghost button — Button Left nests inside rightCol (under message);
+    // Button Right is appended directly to the horizontal bubble (sits on the right,
+    // vertically centered with the message via bubble's counterAxisAlignItems='CENTER').
     if (hasAction) {
       const ghost = findGhostBtn(size === 'Small' ? 'XS' : 'Small');
       if (ghost) {
-        // Action row fills the rightCol width; button left or right aligned within
-        const actionRow = figma.createFrame();
-        actionRow.name = 'Actions';
-        actionRow.layoutMode = 'HORIZONTAL';
-        actionRow.primaryAxisSizingMode = 'FIXED';
-        actionRow.counterAxisSizingMode = 'AUTO';
-        actionRow.primaryAxisAlignItems = action === 'Button Right' ? 'MAX' : 'MIN';
-        actionRow.counterAxisAlignItems = 'CENTER';
-        actionRow.itemSpacing = 8;
-        actionRow.paddingLeft = actionRow.paddingRight = 0;
-        actionRow.paddingTop = actionRow.paddingBottom = 0;
-        actionRow.fills = [];
-
         const inst = ghost.createInstance();
         inst.name = 'Action';
         try {
@@ -4511,13 +4502,27 @@ async function buildTooltip() {
             txt.characters = 'Learn More';
           }
         } catch (e) {}
-        actionRow.appendChild(inst);
 
-        // Button Left: nest inside rightCol → indents past icon, aligns to message left edge.
-        // Button Right: append at bubble level → spans full bubble width, sits at bubble's right edge.
-        const actionHost = action === 'Button Right' ? bubble : (stacked ? rightCol : bubble);
-        actionHost.appendChild(actionRow);
-        try { actionRow.layoutSizingHorizontal = 'FILL'; actionRow.layoutSizingVertical = 'HUG'; } catch (e) {}
+        if (actionRight) {
+          // Append button directly to horizontal bubble — sits on right, centered.
+          bubble.appendChild(inst);
+        } else {
+          // Button Left — wrap in FILL-width row inside rightCol; left-align.
+          const actionRow = figma.createFrame();
+          actionRow.name = 'Actions';
+          actionRow.layoutMode = 'HORIZONTAL';
+          actionRow.primaryAxisSizingMode = 'FIXED';
+          actionRow.counterAxisSizingMode = 'AUTO';
+          actionRow.primaryAxisAlignItems = 'MIN';
+          actionRow.counterAxisAlignItems = 'CENTER';
+          actionRow.itemSpacing = 8;
+          actionRow.paddingLeft = actionRow.paddingRight = 0;
+          actionRow.paddingTop = actionRow.paddingBottom = 0;
+          actionRow.fills = [];
+          actionRow.appendChild(inst);
+          (stacked ? rightCol : bubble).appendChild(actionRow);
+          try { actionRow.layoutSizingHorizontal = 'FILL'; actionRow.layoutSizingVertical = 'HUG'; } catch (e) {}
+        }
       }
     }
 

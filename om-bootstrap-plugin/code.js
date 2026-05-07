@@ -9479,7 +9479,9 @@ async function buildTabs2() {
   const FIXED_W = 480;  // canvas width when Full Width = True (responsive consumer can resize)
 
   const SIZE_MAP = { Medium: 'Default', Large: 'Large' };
-  const STYLE_MAP = { Bordered: 'Line', Borderless: 'Line', Filled: 'Boxy' };
+  // Filled → Pill so Active tab text = brand/primary (orange) on a soft pill,
+  // Bordered/Borderless → Line so Active tab gets brand orange text + underline.
+  const STYLE_MAP = { Bordered: 'Line', Borderless: 'Line', Filled: 'Pill' };
 
   async function setTabLabel(inst, label) {
     const t = inst.findOne(n => n.type === 'TEXT');
@@ -9497,14 +9499,18 @@ async function buildTabs2() {
     wrap.layoutMode = 'VERTICAL';
     wrap.itemSpacing = 0;
     wrap.fills = [];
-    wrap.primaryAxisSizingMode = 'AUTO';
     // Full Width=True → component is FIXED 480 wide (consumer resizes for responsive)
     // Full Width=False → component HUGS its tabs (compact)
+    // IMPORTANT: resize() flips both sizing modes to FIXED, so we must set
+    // primaryAxisSizingMode='AUTO' AFTER resize, otherwise the wrapper stays
+    // pinned at 1px tall.
     if (fullWidth) {
-      wrap.counterAxisSizingMode = 'FIXED';
       wrap.resize(FIXED_W, 1);
+      wrap.counterAxisSizingMode = 'FIXED';
+      wrap.primaryAxisSizingMode = 'AUTO';
     } else {
       wrap.counterAxisSizingMode = 'AUTO';
+      wrap.primaryAxisSizingMode = 'AUTO';
     }
 
     const row = figma.createFrame();

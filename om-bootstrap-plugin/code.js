@@ -12738,6 +12738,21 @@ const COMPONENT_TOKEN_SPECS = {
     'text/title':    'text/primary',
     'text/body':     'text/secondary',
   },
+  // ---- ORGANISMS -----------------------------------------------------------
+  'PageHeader': {
+    'surface':            'surface/card',
+    'surface/page':       'surface/base',
+    'border/divider':     'border/default',
+    'text/title':         'text/primary',
+    'text/subtitle':      'text/secondary',
+    'text/breadcrumb':    'text/secondary',
+    'text/breadcrumb/current': 'text/primary',
+    'icon/default':       'icon/default',
+    'tabs/baseline':      'border/default',
+    'tabs/text/default':  'text/secondary',
+    'tabs/text/active':   'brand/primary',
+    'tabs/indicator':     'brand/primary',
+  },
 };
 
 async function buildComponentTokens() {
@@ -12861,7 +12876,7 @@ async function buildPageHeader() {
     comp.itemSpacing = sectionGap;
     comp.paddingLeft = comp.paddingRight = pad;
     comp.paddingTop = comp.paddingBottom = pad;
-    comp.fills = [paintForVar(required['surface/card'] || required['surface/base'])];
+    comp.fills = [paintForVar(required['surface/card'])];
     comp.strokes = [paintForVar(required['border/default'])];
     comp.strokeWeight = 1;
     comp.strokeAlign = 'INSIDE';

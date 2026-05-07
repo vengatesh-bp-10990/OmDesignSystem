@@ -2489,7 +2489,7 @@ async function buildIconButtonShowcase(page, compSet) {
     section.fills = [paintFor(surfaceCard)];
     section.strokes = [paintFor(borderDef)];
     section.strokeWeight = 1;
-    section.appendChild(makeLabel(variant, 'Heading/H4', textPri));
+    section.appendChild(await makeLabel(variant, 'Heading/H4', textPri));
 
     const grid = figma.createFrame();
     grid.layoutMode = 'VERTICAL';
@@ -2514,7 +2514,7 @@ async function buildIconButtonShowcase(page, compSet) {
       cell.layoutMode = 'HORIZONTAL';
       cell.primaryAxisAlignItems = 'CENTER';
       cell.counterAxisAlignItems = 'CENTER';
-      cell.appendChild(makeLabel(size, 'Label/Default', textSec));
+      cell.appendChild(await makeLabel(size, 'Label/Default', textSec));
       header.appendChild(cell);
     }
     grid.appendChild(header);
@@ -2531,7 +2531,7 @@ async function buildIconButtonShowcase(page, compSet) {
       stateCell.resize(80, 48); stateCell.fills = [];
       stateCell.layoutMode = 'HORIZONTAL';
       stateCell.counterAxisAlignItems = 'CENTER';
-      stateCell.appendChild(makeLabel(state, 'Label/Default', textSec));
+      stateCell.appendChild(await makeLabel(state, 'Label/Default', textSec));
       row.appendChild(stateCell);
       for (const size of BUTTON_SIZES) {
         const v = findVariant(variant, size, state);

@@ -2147,6 +2147,13 @@ const FALLBACK_GLYPHS = {
   'alert-circle':    '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="#101F3E" stroke-width="1.3"/><path d="M8 5.333v3.334M8 10.667v.001" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round"/></svg>',
   'alert-triangle':  '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 2.667L14 13.333H2L8 2.667z" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 6.667v3.333M8 12v.001" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round"/></svg>',
   'star':            '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 1.667l1.96 3.97 4.373.636-3.166 3.087.748 4.357L8 11.667l-3.915 2.05.748-4.357L1.667 6.273l4.373-.636L8 1.667z" stroke="#101F3E" stroke-width="1.3" stroke-linejoin="round"/></svg>',
+  'bar-chart':       '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 13V8M8 13V4M13 13v-7" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13h12" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  'folder':          '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4.667A1.333 1.333 0 013.333 3.333H6.5L8 5h4.667A1.333 1.333 0 0114 6.333v5.334A1.333 1.333 0 0112.667 13H3.333A1.333 1.333 0 012 11.667V4.667z" stroke="#101F3E" stroke-width="1.3" stroke-linejoin="round"/></svg>',
+  'file':            '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.333 2H4.667A1.333 1.333 0 003.333 3.333v9.334A1.333 1.333 0 004.667 14h6.666a1.333 1.333 0 001.334-1.333V5.333L9.333 2z" stroke="#101F3E" stroke-width="1.3" stroke-linejoin="round"/><path d="M9.333 2v3.333h3.334" stroke="#101F3E" stroke-width="1.3" stroke-linejoin="round"/></svg>',
+  'users':           '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M11 13.333v-1.333A2.667 2.667 0 008.333 9.333H4A2.667 2.667 0 001.333 12v1.333" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6.167" cy="4.667" r="2.667" stroke="#101F3E" stroke-width="1.3"/><path d="M14.667 13.333V12a2.667 2.667 0 00-2-2.583M10.667 2.083a2.667 2.667 0 010 5.167" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  'settings':        '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="2" stroke="#101F3E" stroke-width="1.3"/><path d="M12.933 9.333a1.1 1.1 0 00.22 1.214l.04.04a1.333 1.333 0 11-1.886 1.886l-.04-.04a1.1 1.1 0 00-1.214-.22 1.1 1.1 0 00-.666 1.007v.114a1.333 1.333 0 11-2.667 0v-.06a1.1 1.1 0 00-.72-1.007 1.1 1.1 0 00-1.213.22l-.04.04A1.333 1.333 0 112.88 10.64l.04-.04a1.1 1.1 0 00.22-1.213 1.1 1.1 0 00-1.007-.667h-.114a1.333 1.333 0 110-2.667h.06a1.1 1.1 0 001.007-.72 1.1 1.1 0 00-.22-1.213l-.04-.04A1.333 1.333 0 114.713 2.193l.04.04a1.1 1.1 0 001.214.22h.054a1.1 1.1 0 00.667-1.006v-.114a1.333 1.333 0 112.667 0v.06a1.1 1.1 0 00.666 1.007 1.1 1.1 0 001.214-.22l.04-.04a1.333 1.333 0 111.886 1.886l-.04.04a1.1 1.1 0 00-.22 1.213v.054a1.1 1.1 0 001.007.666h.114a1.333 1.333 0 110 2.667h-.06a1.1 1.1 0 00-1.007.667z" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'bell':            '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 5.333a4 4 0 00-8 0c0 4.667-2 6-2 6h12s-2-1.333-2-6zM9.153 14a1.333 1.333 0 01-2.306 0" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'help-circle':     '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="#101F3E" stroke-width="1.3"/><path d="M6.06 6a2 2 0 013.886.667c0 1.333-2 2-2 2M8 11.333v.001" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
 async function findOrCreateIconComponent(name, iconsPage, iconDefaultVar) {
@@ -11524,14 +11531,15 @@ async function buildSidebar() {
   await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
 
   const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
-  const homeIc = await findIconComp(iconsPage, ['home']);
-  const usersIc = await findIconComp(iconsPage, ['users', 'user']);
-  const settingsIc = await findIconComp(iconsPage, ['settings', 'cog', 'gear']);
-  const chartIc = await findIconComp(iconsPage, ['chart', 'bar-chart', 'analytics']);
-  const fileIc = await findIconComp(iconsPage, ['file', 'document']);
-  const folderIc = await findIconComp(iconsPage, ['folder']);
-  const bellIc = await findIconComp(iconsPage, ['bell', 'notification']);
-  const helpIc = await findIconComp(iconsPage, ['help', 'question', 'info']);
+  const iconDefaultVar = required['icon/default'];
+  const homeIc = await findOrCreateIconComponent('home', iconsPage, iconDefaultVar);
+  const usersIc = await findOrCreateIconComponent('users', iconsPage, iconDefaultVar);
+  const settingsIc = await findOrCreateIconComponent('settings', iconsPage, iconDefaultVar);
+  const chartIc = await findOrCreateIconComponent('bar-chart', iconsPage, iconDefaultVar);
+  const fileIc = await findOrCreateIconComponent('file', iconsPage, iconDefaultVar);
+  const folderIc = await findOrCreateIconComponent('folder', iconsPage, iconDefaultVar);
+  const bellIc = await findOrCreateIconComponent('bell', iconsPage, iconDefaultVar);
+  const helpIc = await findOrCreateIconComponent('help-circle', iconsPage, iconDefaultVar);
 
   // Inline list-item row (Expanded)
   async function makeListItem(icon, label, active) {

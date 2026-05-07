@@ -31,7 +31,25 @@
 - Spinner: 15 variants (Size × Color) + Has Label boolean
 
 ### ⏳ Phase 4 — Molecules
-Menu Item → Dropdown Menu → Select → Search Bar → Tabs → ...
+- ✅ Menu Item
+- ✅ Dropdown Menu
+- ✅ Search Bar
+- ✅ Breadcrumb
+- ✅ Tab Item (atom)
+- ✅ Pagination
+- ✅ Card
+- ✅ Alert
+- ✅ Toast
+- ✅ Progress
+- ✅ Skeleton
+- ✅ Accordion (Bordered + Inline × Default/Hover/Active = 6 variants)
+- ✅ **Tabs (molecule)** — 3 variants × 2 sizes × Full Width false/true = 12 (commit `899008e`, May 7 2026)
+  - `Line` = underline indicator + 1px baseline
+  - `Square` = soft neutral container (radius 8) + peach Active pill
+  - `Rounded` = grey container (radius 999) + white Active pill
+  - Composes real `Tab Item` instances; leading icon hidden inside instances for clean label-only bar
+- ⏳ **Next:** Date Picker family (Date / Range / Time / DateTime) — needs Calendar atom first
+- ⏳ Other potential molecules: Modal/Dialog, Stepper, Sidebar/Nav, Empty State
 
 ### ⏳ Phase 5 — Motion / Interactions
 Deferred to end of Phase 5.

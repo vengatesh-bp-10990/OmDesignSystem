@@ -13895,28 +13895,41 @@ const TABLE_CELL_WIDTH_MULT = {
 
 // ---- Showcase wrapper used by all 3 table builders -----------------------
 async function _tableShowcase(opts) {
-  const { page, compSets, title, subtitle, surfaceVar, borderVar, primaryVar, secondaryVar } = opts;
+  const { page, compSets, title, subtitle, surfaceVar, borderVar, primaryVar, secondaryVar, wrapWidth } = opts;
   await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
   await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
 
+  // Compute total wrap width if not provided — based on widest set + grid math
+  let GRID_W = wrapWidth;
+  if (!GRID_W) {
+    const widest = compSets.reduce((m, c) => c && c.width > m ? c.width : m, 0);
+    // Aim for ~3 columns of widest
+    GRID_W = Math.max(1200, Math.min(2400, widest * 3 + 32 * 2));
+  }
+  const PAD = 48;
+  const FRAME_W = GRID_W + PAD * 2;
+
   const wrap = figma.createFrame();
-  wrap.name = `${title} — Showcase`;
+  wrap.name = `${title} \u2014 Showcase`;
   wrap.layoutMode = 'VERTICAL';
   wrap.itemSpacing = 24;
-  wrap.paddingLeft = wrap.paddingRight = 48;
-  wrap.paddingTop = wrap.paddingBottom = 48;
+  wrap.paddingLeft = wrap.paddingRight = PAD;
+  wrap.paddingTop = wrap.paddingBottom = PAD;
   wrap.cornerRadius = 16;
   if (surfaceVar) wrap.fills = [paintForVar(surfaceVar)];
   else wrap.fills = [];
   if (borderVar) { wrap.strokes = [paintForVar(borderVar)]; wrap.strokeWeight = 1; }
   page.appendChild(wrap);
+  wrap.resize(FRAME_W, 1);
+  wrap.primaryAxisSizingMode = 'AUTO';   // hug height (VERTICAL → primary=Y)
+  wrap.counterAxisSizingMode = 'FIXED';  // fixed width
 
   const head = figma.createFrame();
   head.layoutMode = 'VERTICAL';
   head.itemSpacing = 6;
   head.fills = [];
   wrap.appendChild(head);
-  try { head.layoutSizingHorizontal = 'HUG'; head.layoutSizingVertical = 'HUG'; } catch (e) {}
+  try { head.layoutSizingHorizontal = 'FILL'; head.layoutSizingVertical = 'HUG'; } catch (e) {}
 
   const h = figma.createText();
   h.fontName = { family: 'Inter', style: 'Semi Bold' };
@@ -13932,22 +13945,24 @@ async function _tableShowcase(opts) {
     s.fontSize = 14;
     if (secondaryVar) s.fills = [paintForVar(secondaryVar)];
     head.appendChild(s);
+    try { s.layoutSizingHorizontal = 'FILL'; s.textAutoResize = 'HEIGHT'; } catch (e) {}
   }
 
-  // Grid: lay component sets in a 4-column flex
+  // Grid: HORIZONTAL+WRAP with fixed width so wrapping kicks in
   const grid = figma.createFrame();
   grid.layoutMode = 'HORIZONTAL';
   grid.layoutWrap = 'WRAP';
   grid.itemSpacing = 32;
   grid.counterAxisSpacing = 32;
   grid.fills = [];
-  grid.paddingTop = grid.paddingBottom = 0;
   wrap.appendChild(grid);
   try { grid.layoutSizingHorizontal = 'FILL'; grid.layoutSizingVertical = 'HUG'; } catch (e) {}
 
   for (const cs of compSets) {
     if (!cs) continue;
     grid.appendChild(cs);
+    // Keep the component sets at their natural HUG size — do NOT FILL
+    try { cs.layoutSizingHorizontal = 'HUG'; cs.layoutSizingVertical = 'HUG'; } catch (e) {}
   }
 
   // Auto-position
@@ -14083,8 +14098,9 @@ async function buildTableCells() {
     name: 'Actions', aligns: ['Right'],
     async build(cell, density) {
       const size = density === 'Compact' ? 'Small' : 'Default';
-      const v = findVariant(iconBtnSet, [/Type=Ghost/, new RegExp(`Size=${size}`), /State=Default/]) ||
-                findVariant(iconBtnSet, [/Type=Ghost/]);
+      const v = findVariant(iconBtnSet, [/Variant=Ghost/, new RegExp(`Size=${size}`), /State=Default/]) ||
+                findVariant(iconBtnSet, [/Variant=Ghost/, /State=Default/]) ||
+                findVariant(iconBtnSet, [/Variant=Ghost/]);
       if (v) cell.appendChild(v.createInstance());
     },
   });
@@ -14166,8 +14182,15 @@ async function buildTableCells() {
       wrap.itemSpacing = 0;
       wrap.fills = [];
       cell.appendChild(wrap);
-      wrap.appendChild(await makeText('America/New_York', d.text, tk('text/primary')));
-      if (density !== 'Compact') wrap.appendChild(await makeText('GMT−05:00 · 09:42 AM', d.sub, tk('text/secondary')));
+      try { wrap.layoutSizingHorizontal = 'FILL'; wrap.layoutSizingVertical = 'HUG'; } catch (e) {}
+      const a = await makeText('America/New_York', d.text, tk('text/primary'));
+      wrap.appendChild(a);
+      try { a.layoutSizingHorizontal = 'FILL'; a.textAutoResize = 'HEIGHT'; a.maxLines = 1; a.textTruncation = 'ENDING'; } catch (e) {}
+      if (density !== 'Compact') {
+        const b = await makeText('GMT−05:00 · 09:42 AM', d.sub, tk('text/secondary'));
+        wrap.appendChild(b);
+        try { b.layoutSizingHorizontal = 'FILL'; b.textAutoResize = 'HEIGHT'; b.maxLines = 1; b.textTruncation = 'ENDING'; } catch (e) {}
+      }
     },
   });
 
@@ -14179,11 +14202,10 @@ async function buildTableCells() {
         'Tracks the customer onboarding flow from sign-up to first successful action — used for retention dashboards.',
         d.text, tk('text/secondary')
       );
-      // Truncate to 2 lines visually (Figma supports textTruncation when textAutoResize allows)
+      cell.appendChild(t);
+      try { t.layoutSizingHorizontal = 'FILL'; } catch (e) {}
       try { t.textAutoResize = 'HEIGHT'; } catch (e) {}
       try { t.maxLines = 2; t.textTruncation = 'ENDING'; } catch (e) {}
-      try { t.layoutSizingHorizontal = 'FILL'; } catch (e) {}
-      cell.appendChild(t);
     },
   });
 
@@ -14196,13 +14218,15 @@ async function buildTableCells() {
       wrap.itemSpacing = 2;
       wrap.fills = [];
       cell.appendChild(wrap);
-      try { wrap.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+      try { wrap.layoutSizingHorizontal = 'FILL'; wrap.layoutSizingVertical = 'HUG'; } catch (e) {}
       const log = figma.createText();
       log.fontName = monoFont;
       log.characters = '[INFO] api/v1/users · 200 · 84ms';
       log.fontSize = density === 'Compact' ? 11 : 12;
       log.fills = [paintForVar(tk('mono/text'))];
       wrap.appendChild(log);
+      try { log.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+      try { log.textAutoResize = 'HEIGHT'; log.maxLines = 1; log.textTruncation = 'ENDING'; } catch (e) {}
       const more = await makeText('View more', d.sub, tk('text/link'));
       try { more.textDecoration = 'UNDERLINE'; } catch (e) {}
       wrap.appendChild(more);

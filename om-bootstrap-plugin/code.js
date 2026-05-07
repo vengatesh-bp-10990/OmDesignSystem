@@ -432,7 +432,7 @@ async function buildAppearance(primitives) {
     'icon/inverse':    await alias('icon/inverse',    neutralVars['0'],   neutralVars['900'], ICON_SCOPES),
     // Inverse / Tooltip surface — dark in light mode, ELEVATED dark in dark mode
     // (so it doesn't blend with the page background which is N950/N900).
-    'surface/inverse':       await alias('surface/inverse',       neutralVars['900'], neutralVars['700'], SURFACE_SCOPES),
+    'surface/inverse':       await alias('surface/inverse',       neutralVars['700'], neutralVars['600'], SURFACE_SCOPES),
     'border/inverse':        await alias('border/inverse',        neutralVars['800'], neutralVars['600'], BORDER_SCOPES),
     'text/inverse-primary':  await alias('text/inverse-primary',  neutralVars['0'],   neutralVars['0'],   TEXT_SCOPES),
     'text/inverse-secondary':await alias('text/inverse-secondary',neutralVars['300'], neutralVars['300'], TEXT_SCOPES),
@@ -8564,9 +8564,9 @@ async function buildAlert() {
   async function makeVariant(status, style) {
     const tok = statusTokens(required, status);
     const isSolid = style === 'Solid';
-    // Neutral Solid uses surface/inverse tone (text/primary as bg) so it reads as a dark-mode panel.
-    // For other statuses, isSolid bg = the status hue.
-    const solidBg = status === 'Neutral' ? required['text/primary'] : tok.color;
+    // Neutral Solid uses surface/inverse — a softened slate (N700 light / N600 dark)
+    // so it reads as a greyish panel instead of pitch black.
+    const solidBg = status === 'Neutral' ? required['surface/inverse'] : tok.color;
     const onColor = isSolid ? (required['brand/on-primary'] || required['surface/card']) : tok.text;
     const bg     = isSolid ? solidBg : (style === 'Subtle' ? tok.subtle : null);
     const border = isSolid ? null      : tok.border;

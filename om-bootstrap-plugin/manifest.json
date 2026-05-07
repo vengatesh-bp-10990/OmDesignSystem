@@ -25,6 +25,8 @@
     { "name": "Build Dropdown", "command": "buildDropdown" },
     { "name": "Build Divider", "command": "buildDivider" },
     { "name": "Build Spinner", "command": "buildSpinner" },
+    { "name": "Build Menu Item (Molecule)", "command": "buildMenuItem" },
+    { "name": "Build Dropdown Menu (Molecule)", "command": "buildDropdownMenu" },
     { "name": "Reset Text Styles", "command": "resetTextStyles" },
     { "name": "Reset (Delete OM Collections)", "command": "reset" }
   ]

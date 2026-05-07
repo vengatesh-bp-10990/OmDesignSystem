@@ -6641,6 +6641,501 @@ async function buildSpinner() {
 
 
 // =============================================================================
+// MENU ITEM (molecule) — single row used inside Dropdown Menu / Context Menu
+//   Size:   Small (28h) | Default (32h)
+//   State:  Default | Hover | Selected | Disabled
+//   Bools:  Has Leading Icon, Has Trailing Icon, Has Description, Has Shortcut, Has Checkbox
+//   Tokens: row bg = surface/card | state/disabled-bg; hover = surface/base-hover or
+//           state/hover-overlay; selected = brand/primary-subtle; text colors per state.
+// =============================================================================
+const MENU_ITEM_SIZE_SPECS = {
+  Small:   { h: 28, padX: 8,  font: 'Body/Small',   gap: 8,  icon: 14 },
+  Default: { h: 32, padX: 10, font: 'Body/Default', gap: 10, icon: 16 },
+};
+
+async function findCheckboxComponent(state /* 'Off' | 'On' */) {
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms'));
+  if (!atomsPage) return null;
+  const set = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Checkbox');
+  if (!set) return null;
+  // Try common Checkbox naming. Falls back to first variant.
+  const want = state === 'On' ? /Checked|=On|=Checked/ : /Unchecked|=Off/;
+  return set.children.find(c => want.test(c.name))
+      || set.defaultVariant
+      || set.children[0];
+}
+
+async function buildMenuItem() {
+  console.log('[OM DS] buildMenuItem started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
+                     || figma.root.children.find(p => p.name.includes('Atoms'))
+                     || figma.currentPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  // Idempotency
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Menu Item');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Menu Item')) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Size=(Small|Default), State=(Default|Hover|Selected|Disabled)$/.test(c.name))) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {};
+  for (const s of styles) styleByName[s.name] = s;
+  const fontsToLoad = new Set();
+  for (const k of Object.keys(MENU_ITEM_SIZE_SPECS)) {
+    const st = styleByName[MENU_ITEM_SIZE_SPECS[k].font];
+    if (st) fontsToLoad.add(JSON.stringify(st.fontName));
+  }
+  const descStyle = styleByName['Body/Small'];
+  if (descStyle) fontsToLoad.add(JSON.stringify(descStyle.fontName));
+  for (const f of fontsToLoad) await figma.loadFontAsync(JSON.parse(f));
+
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const leadIc  = await findIconComp(iconsPage, ['user', 'profile', 'home', 'settings', 'star']);
+  const trailIc = await findIconComp(iconsPage, ['chevron-right', 'arrow-right', 'caret-right']);
+  const checkOn  = await findCheckboxComponent('On');
+  const checkOff = await findCheckboxComponent('Off');
+
+  function colorsFor(state) {
+    if (state === 'Disabled') return {
+      bg: null, text: required['state/disabled-text'], desc: required['state/disabled-text'],
+      icon: required['state/disabled-text'], shortcut: required['state/disabled-text'],
+    };
+    if (state === 'Selected') return {
+      bg: required['brand/primary-subtle'] || required['brand/primary-muted'],
+      text: required['text/primary'], desc: required['text/secondary'],
+      icon: required['brand/primary'], shortcut: required['text/secondary'],
+    };
+    if (state === 'Hover') return {
+      bg: required['brand/primary-muted'] || required['surface/base'],
+      text: required['text/primary'], desc: required['text/secondary'],
+      icon: required['icon/default'] || required['text/primary'], shortcut: required['text/secondary'],
+    };
+    return {
+      bg: null, text: required['text/primary'], desc: required['text/secondary'],
+      icon: required['icon/default'] || required['text/primary'], shortcut: required['text/secondary'],
+    };
+  }
+
+  async function makeVariant(size, state) {
+    const spec = MENU_ITEM_SIZE_SPECS[size];
+    const colors = colorsFor(state);
+
+    const comp = figma.createComponent();
+    comp.name = `Size=${size}, State=${state}`;
+    comp.layoutMode = 'HORIZONTAL';
+    comp.primaryAxisSizingMode = 'FIXED';     // we'll resize after appending
+    comp.counterAxisSizingMode = 'AUTO';
+    comp.primaryAxisAlignItems = 'MIN';
+    comp.counterAxisAlignItems = 'CENTER';
+    comp.itemSpacing = spec.gap;
+    comp.paddingLeft = comp.paddingRight = spec.padX;
+    comp.paddingTop = comp.paddingBottom = (spec.h - 16) / 2;
+    comp.cornerRadius = 4;
+    comp.fills = colors.bg ? [paintForVar(colors.bg)] : [];
+    comp.resize(220, spec.h);
+
+    // Leading icon (toggleable via boolean)
+    let leadInst = null;
+    if (leadIc) {
+      leadInst = leadIc.createInstance();
+      leadInst.name = 'Leading';
+      leadInst.resize(spec.icon, spec.icon);
+      bindIconColorForm(leadInst, colors.icon);
+      comp.appendChild(leadInst);
+      try { leadInst.layoutSizingHorizontal = 'FIXED'; leadInst.layoutSizingVertical = 'FIXED'; } catch (e) {}
+    }
+
+    // Checkbox slot (toggleable via boolean) — uses Checkbox atom. Selected state shows On.
+    let cbInst = null;
+    const cbComp = state === 'Selected' ? checkOn : checkOff;
+    if (cbComp) {
+      cbInst = cbComp.createInstance();
+      cbInst.name = 'Checkbox';
+      try { cbInst.layoutSizingHorizontal = 'HUG'; cbInst.layoutSizingVertical = 'HUG'; } catch (e) {}
+      comp.appendChild(cbInst);
+    }
+
+    // Text column (Label + optional Description)
+    const textCol = figma.createFrame();
+    textCol.name = 'Text';
+    textCol.layoutMode = 'VERTICAL';
+    textCol.primaryAxisSizingMode = 'AUTO';
+    textCol.counterAxisSizingMode = 'AUTO';
+    textCol.primaryAxisAlignItems = 'MIN';
+    textCol.counterAxisAlignItems = 'MIN';
+    textCol.itemSpacing = 0;
+    textCol.fills = [];
+    comp.appendChild(textCol);
+
+    const label = figma.createText();
+    const fStyle = styleByName[spec.font];
+    if (fStyle) await label.setTextStyleIdAsync(fStyle.id);
+    label.characters = 'Menu item label';
+    label.fills = [paintForVar(colors.text)];
+    label.name = 'Label';
+    textCol.appendChild(label);
+
+    const desc = figma.createText();
+    if (descStyle) await desc.setTextStyleIdAsync(descStyle.id);
+    desc.characters = 'Helpful description';
+    desc.fills = [paintForVar(colors.desc)];
+    desc.name = 'Description';
+    textCol.appendChild(desc);
+
+    try { textCol.layoutSizingHorizontal = 'FILL'; textCol.layoutSizingVertical = 'HUG'; } catch (e) {}
+
+    // Shortcut text (right-aligned via spacer)
+    const shortcut = figma.createText();
+    if (fStyle) await shortcut.setTextStyleIdAsync(fStyle.id);
+    shortcut.characters = '⌘K';
+    shortcut.fills = [paintForVar(colors.shortcut)];
+    shortcut.name = 'Shortcut';
+    comp.appendChild(shortcut);
+
+    // Trailing icon (chevron-right for submenu)
+    let trailInst = null;
+    if (trailIc) {
+      trailInst = trailIc.createInstance();
+      trailInst.name = 'Trailing';
+      trailInst.resize(spec.icon, spec.icon);
+      bindIconColorForm(trailInst, colors.icon);
+      comp.appendChild(trailInst);
+      try { trailInst.layoutSizingHorizontal = 'FIXED'; trailInst.layoutSizingVertical = 'FIXED'; } catch (e) {}
+    }
+
+    return { comp, leadInst, cbInst, desc, shortcut, trailInst };
+  }
+
+  const SIZES  = ['Small', 'Default'];
+  const STATES = ['Default', 'Hover', 'Selected', 'Disabled'];
+
+  const allVariants = [];
+  const meta = [];
+  const leadNodes = [];
+  const cbNodes   = [];
+  const descNodes = [];
+  const shortcutNodes = [];
+  const trailNodes = [];
+  for (const size of SIZES) {
+    for (const state of STATES) {
+      const r = await makeVariant(size, state);
+      allVariants.push(r.comp);
+      meta.push({ size, state });
+      if (r.leadInst)  leadNodes.push(r.leadInst);
+      if (r.cbInst)    cbNodes.push(r.cbInst);
+      if (r.desc)      descNodes.push(r.desc);
+      if (r.shortcut)  shortcutNodes.push(r.shortcut);
+      if (r.trailInst) trailNodes.push(r.trailInst);
+    }
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Menu Item';
+  compSet.layoutMode = 'NONE';
+  compSet.fills = [];
+
+  // Boolean props — default Has Description / Has Shortcut / Has Checkbox = false
+  const wire = (id, nodes) => {
+    if (!id) return;
+    for (const n of nodes) {
+      try { n.componentPropertyReferences = { visible: id }; } catch (e) {}
+    }
+  };
+  let pLead = null, pTrail = null, pDesc = null, pShortcut = null, pCb = null;
+  try { pLead     = compSet.addComponentProperty('Has Leading Icon',  'BOOLEAN', true); }  catch (e) {}
+  try { pTrail    = compSet.addComponentProperty('Has Trailing Icon', 'BOOLEAN', false); } catch (e) {}
+  try { pDesc     = compSet.addComponentProperty('Has Description',   'BOOLEAN', false); } catch (e) {}
+  try { pShortcut = compSet.addComponentProperty('Has Shortcut',      'BOOLEAN', false); } catch (e) {}
+  try { pCb       = compSet.addComponentProperty('Has Checkbox',      'BOOLEAN', false); } catch (e) {}
+  wire(pLead, leadNodes);
+  wire(pTrail, trailNodes);
+  wire(pDesc, descNodes);
+  wire(pShortcut, shortcutNodes);
+  wire(pCb, cbNodes);
+
+  // Layout grid: cols=States, rows=Sizes
+  const PAD_LEFT = 220, PAD_TOP = 140, PAD_RIGHT = 56, PAD_BOT = 56;
+  const COL_W = 240, ROW_H = 60, COL_GAP = 24, ROW_GAP = 24;
+  for (let i = 0; i < allVariants.length; i++) {
+    const m = meta[i];
+    const v = allVariants[i];
+    const colIdx = STATES.indexOf(m.state);
+    const rowIdx = SIZES.indexOf(m.size);
+    v.x = Math.round(PAD_LEFT + colIdx * (COL_W + COL_GAP) + (COL_W - v.width) / 2);
+    v.y = Math.round(PAD_TOP + rowIdx * (ROW_H + ROW_GAP) + (ROW_H - v.height) / 2);
+  }
+  compSet.resize(
+    PAD_LEFT + COL_W * STATES.length + COL_GAP * (STATES.length - 1) + PAD_RIGHT,
+    PAD_TOP + ROW_H * SIZES.length + ROW_GAP * (SIZES.length - 1) + PAD_BOT
+  );
+
+  let maxBottom = 0;
+  for (const node of moleculesPage.children) {
+    if (node === compSet) continue;
+    if (node.type !== 'COMPONENT_SET' && node.type !== 'COMPONENT' && node.type !== 'FRAME') continue;
+    if ('y' in node && 'height' in node) { const b = node.y + node.height; if (b > maxBottom) maxBottom = b; }
+  }
+  compSet.x = 0;
+  compSet.y = maxBottom > 0 ? Math.round(maxBottom + 120) : 0;
+
+  const colGroups = [{
+    name: 'State', x: PAD_LEFT, width: COL_W * STATES.length + COL_GAP * (STATES.length - 1),
+    sizes: STATES.map((s, i) => ({ name: s, x: PAD_LEFT + i * (COL_W + COL_GAP), width: COL_W })),
+  }];
+  const rowGroups = [{
+    name: 'Size', y: PAD_TOP,
+    states: SIZES.map((s, i) => ({ name: s, y: PAD_TOP + i * (ROW_H + ROW_GAP), height: ROW_H })),
+  }];
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'],
+    sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'],
+    labelSecondaryVar: required['text/secondary'],
+    componentName: 'Menu Item',
+    surfaceVar: required['surface/card'],
+    borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Menu Item built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
+// DROPDOWN MENU (molecule) — overlay panel containing Menu Item instances
+//   Size:    Small | Default
+//   Content: Items | Items + Search | Items + Footer
+//   Bools:   Has Title (header)
+//   Tokens:  bg = surface/card, border = border/default, shadow = elevation token (skipped)
+// =============================================================================
+async function buildDropdownMenu() {
+  console.log('[OM DS] buildDropdownMenu started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
+                     || figma.root.children.find(p => p.name.includes('Atoms'))
+                     || figma.currentPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Dropdown Menu');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Dropdown Menu')) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {};
+  for (const s of styles) styleByName[s.name] = s;
+  const titleStyle = styleByName['Label/Default'];
+  if (titleStyle) await figma.loadFontAsync(titleStyle.fontName);
+
+  // Find Menu Item set on Molecules page
+  const miSet = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Menu Item');
+  if (!miSet) throw new Error('Run "Build Menu Item" first.');
+  const miBySize = (size) => miSet.children.find(c => c.name === `Size=${size}, State=Default`)
+                        || miSet.children.find(c => c.name.startsWith(`Size=${size}`))
+                        || miSet.children[0];
+
+  // Find search atoms
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const searchIc = await findIconComp(iconsPage, ['search', 'magnifying-glass']);
+
+  async function makeVariant(size, content) {
+    const comp = figma.createComponent();
+    comp.name = `Size=${size}, Content=${content}`;
+    comp.layoutMode = 'VERTICAL';
+    comp.primaryAxisSizingMode = 'AUTO';
+    comp.counterAxisSizingMode = 'FIXED';
+    comp.primaryAxisAlignItems = 'MIN';
+    comp.counterAxisAlignItems = 'MIN';
+    comp.itemSpacing = 0;
+    comp.paddingLeft = comp.paddingRight = 0;
+    comp.paddingTop = comp.paddingBottom = 4;
+    comp.cornerRadius = 6;
+    comp.fills = [paintForVar(required['surface/card'])];
+    comp.strokes = [paintForVar(required['border/default'])];
+    comp.strokeWeight = 1;
+    comp.strokeAlign = 'INSIDE';
+    comp.resize(240, 100);
+
+    // Optional Title row (boolean)
+    const title = figma.createText();
+    if (titleStyle) await title.setTextStyleIdAsync(titleStyle.id);
+    title.characters = 'Section';
+    title.fills = [paintForVar(required['text/secondary'])];
+    title.name = 'Title';
+    const titleWrap = figma.createFrame();
+    titleWrap.name = 'TitleWrap';
+    titleWrap.layoutMode = 'HORIZONTAL';
+    titleWrap.primaryAxisSizingMode = 'FIXED';
+    titleWrap.counterAxisSizingMode = 'AUTO';
+    titleWrap.paddingLeft = titleWrap.paddingRight = 12;
+    titleWrap.paddingTop = 6;
+    titleWrap.paddingBottom = 4;
+    titleWrap.fills = [];
+    titleWrap.appendChild(title);
+    comp.appendChild(titleWrap);
+    try { titleWrap.layoutSizingHorizontal = 'FILL'; titleWrap.layoutSizingVertical = 'HUG'; } catch (e) {}
+
+    // Optional Search row (boolean -> Content === 'Search')
+    if (content === 'Search') {
+      const padX = 8, h = size === 'Small' ? 32 : 36;
+      const row = figma.createFrame();
+      row.name = 'Search';
+      row.layoutMode = 'HORIZONTAL';
+      row.primaryAxisSizingMode = 'FIXED';
+      row.counterAxisSizingMode = 'FIXED';
+      row.primaryAxisAlignItems = 'MIN';
+      row.counterAxisAlignItems = 'CENTER';
+      row.itemSpacing = 6;
+      row.paddingLeft = row.paddingRight = padX;
+      row.fills = [];
+      row.strokes = [paintForVar(required['border/default'])];
+      row.strokeWeight = 0;
+      row.strokeBottomWeight = 1;
+      row.strokeAlign = 'INSIDE';
+      comp.appendChild(row);
+      try { row.layoutSizingHorizontal = 'FILL'; row.layoutSizingVertical = 'FIXED'; } catch (e) {}
+      row.resize(row.width, h);
+      if (searchIc) {
+        const ic = searchIc.createInstance();
+        ic.name = 'Icon';
+        ic.resize(14, 14);
+        bindIconColorForm(ic, required['icon/default'] || required['text/secondary']);
+        row.appendChild(ic);
+      }
+      const placeholder = figma.createText();
+      const fStyle = styleByName['Body/Default'];
+      if (fStyle) { try { await figma.loadFontAsync(fStyle.fontName); } catch (e) {} await placeholder.setTextStyleIdAsync(fStyle.id); }
+      placeholder.characters = 'Search…';
+      placeholder.fills = [paintForVar(required['text/secondary'])];
+      placeholder.name = 'Placeholder';
+      row.appendChild(placeholder);
+    }
+
+    // 4 Menu Item instances
+    const miComp = miBySize(size);
+    if (miComp) {
+      for (let i = 0; i < 4; i++) {
+        const inst = miComp.createInstance();
+        inst.name = `Item ${i + 1}`;
+        comp.appendChild(inst);
+        try { inst.layoutSizingHorizontal = 'FILL'; inst.layoutSizingVertical = 'HUG'; } catch (e) {}
+      }
+    }
+
+    // Optional Footer row
+    if (content === 'Footer') {
+      const padX = 8, h = size === 'Small' ? 32 : 36;
+      const row = figma.createFrame();
+      row.name = 'Footer';
+      row.layoutMode = 'HORIZONTAL';
+      row.primaryAxisSizingMode = 'FIXED';
+      row.counterAxisSizingMode = 'FIXED';
+      row.primaryAxisAlignItems = 'CENTER';
+      row.counterAxisAlignItems = 'CENTER';
+      row.paddingLeft = row.paddingRight = padX;
+      row.fills = [];
+      row.strokes = [paintForVar(required['border/default'])];
+      row.strokeWeight = 0;
+      row.strokeTopWeight = 1;
+      row.strokeAlign = 'INSIDE';
+      comp.appendChild(row);
+      try { row.layoutSizingHorizontal = 'FILL'; row.layoutSizingVertical = 'FIXED'; } catch (e) {}
+      row.resize(row.width, h);
+      const t = figma.createText();
+      const fStyle = styleByName['Body/Small'];
+      if (fStyle) { try { await figma.loadFontAsync(fStyle.fontName); } catch (e) {} await t.setTextStyleIdAsync(fStyle.id); }
+      t.characters = '+ Add new';
+      t.fills = [paintForVar(required['brand/primary'])];
+      t.name = 'Action';
+      row.appendChild(t);
+    }
+
+    return { comp, titleWrap };
+  }
+
+  const SIZES   = ['Small', 'Default'];
+  const CONTENT = ['Items', 'Search', 'Footer'];
+
+  const allVariants = [];
+  const meta = [];
+  const titleNodes = [];
+  for (const size of SIZES) {
+    for (const content of CONTENT) {
+      const r = await makeVariant(size, content);
+      allVariants.push(r.comp);
+      meta.push({ size, content });
+      if (r.titleWrap) titleNodes.push(r.titleWrap);
+    }
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Dropdown Menu';
+  compSet.layoutMode = 'NONE';
+  compSet.fills = [];
+
+  let pTitle = null;
+  try { pTitle = compSet.addComponentProperty('Has Title', 'BOOLEAN', false); } catch (e) {}
+  if (pTitle) for (const t of titleNodes) {
+    try { t.componentPropertyReferences = { visible: pTitle }; } catch (e) {}
+  }
+
+  // Layout: cols = Content (3), rows = Size (2)
+  const PAD_LEFT = 220, PAD_TOP = 140, PAD_RIGHT = 56, PAD_BOT = 56;
+  const COL_W = 280, ROW_H = 240, COL_GAP = 32, ROW_GAP = 32;
+  for (let i = 0; i < allVariants.length; i++) {
+    const m = meta[i];
+    const v = allVariants[i];
+    const colIdx = CONTENT.indexOf(m.content);
+    const rowIdx = SIZES.indexOf(m.size);
+    v.x = Math.round(PAD_LEFT + colIdx * (COL_W + COL_GAP) + (COL_W - v.width) / 2);
+    v.y = Math.round(PAD_TOP + rowIdx * (ROW_H + ROW_GAP));
+  }
+  compSet.resize(
+    PAD_LEFT + COL_W * CONTENT.length + COL_GAP * (CONTENT.length - 1) + PAD_RIGHT,
+    PAD_TOP + ROW_H * SIZES.length + ROW_GAP * (SIZES.length - 1) + PAD_BOT
+  );
+
+  let maxBottom = 0;
+  for (const node of moleculesPage.children) {
+    if (node === compSet) continue;
+    if (node.type !== 'COMPONENT_SET' && node.type !== 'COMPONENT' && node.type !== 'FRAME') continue;
+    if ('y' in node && 'height' in node) { const b = node.y + node.height; if (b > maxBottom) maxBottom = b; }
+  }
+  compSet.x = 0;
+  compSet.y = maxBottom > 0 ? Math.round(maxBottom + 120) : 0;
+
+  const colGroups = [{
+    name: 'Content', x: PAD_LEFT, width: COL_W * CONTENT.length + COL_GAP * (CONTENT.length - 1),
+    sizes: CONTENT.map((c, i) => ({ name: c, x: PAD_LEFT + i * (COL_W + COL_GAP), width: COL_W })),
+  }];
+  const rowGroups = [{
+    name: 'Size', y: PAD_TOP,
+    states: SIZES.map((s, i) => ({ name: s, y: PAD_TOP + i * (ROW_H + ROW_GAP), height: ROW_H })),
+  }];
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'],
+    sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'],
+    labelSecondaryVar: required['text/secondary'],
+    componentName: 'Dropdown Menu',
+    surfaceVar: required['surface/card'],
+    borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Dropdown Menu built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
 // DROPDOWN — Single + Multi-Chips + Multi-Inline merged
 //   Type: Single | Multi-Chips | Multi-Inline
 //   Size: Small | Default | Large
@@ -7040,6 +7535,10 @@ async function rebuildAll() {
       await buildIconButton();
     } else if (figma.command === 'buildSplitButton') {
       await buildSplitButton();
+    } else if (figma.command === 'buildMenuItem') {
+      await buildMenuItem();
+    } else if (figma.command === 'buildDropdownMenu') {
+      await buildDropdownMenu();
     } else {
       await bootstrap();
     }

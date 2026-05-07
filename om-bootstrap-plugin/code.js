@@ -4494,7 +4494,7 @@ async function buildTooltip() {
         actionRow.layoutMode = 'HORIZONTAL';
         actionRow.primaryAxisSizingMode = 'FIXED';
         actionRow.counterAxisSizingMode = 'AUTO';
-        actionRow.primaryAxisAlignItems = 'MAX';     // right align within column
+        actionRow.primaryAxisAlignItems = 'MIN';     // left align under message text
         actionRow.counterAxisAlignItems = 'CENTER';
         actionRow.itemSpacing = 8;
         actionRow.paddingLeft = actionRow.paddingRight = 0;

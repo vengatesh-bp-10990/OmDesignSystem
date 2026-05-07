@@ -13594,8 +13594,6 @@ async function buildFormLayout() {
     const comp = figma.createComponent();
     comp.name = `Columns=${columns}, Density=${density}`;
     comp.layoutMode = 'VERTICAL';
-    comp.primaryAxisSizingMode = 'AUTO';
-    comp.counterAxisSizingMode = 'FIXED';
     comp.itemSpacing = 0;
     comp.fills = [paintForVar(fl('surface'))];
     comp.strokes = [paintForVar(fl('border/section'))];
@@ -13604,6 +13602,10 @@ async function buildFormLayout() {
     comp.cornerRadius = 12;
     comp.clipsContent = true;
     comp.resize(WIDTH, 1);
+    // Re-apply AFTER resize: comp.resize() implicitly sets both axes to FIXED.
+    // We want HUG height (children grow it) but FIXED width.
+    comp.counterAxisSizingMode = 'FIXED';
+    comp.primaryAxisSizingMode = 'AUTO';
 
     // ---- Section header ---------------------------------------------------
     const header = figma.createFrame();
@@ -13951,8 +13953,6 @@ async function buildDataTable() {
     const comp = figma.createComponent();
     comp.name = `Layout=${layout}, Density=${density}`;
     comp.layoutMode = 'VERTICAL';
-    comp.primaryAxisSizingMode = 'AUTO';
-    comp.counterAxisSizingMode = 'FIXED';
     comp.itemSpacing = 0;
     comp.fills = [paintForVar(dt('surface'))];
     comp.strokes = [paintForVar(dt('border/outer'))];
@@ -13961,6 +13961,9 @@ async function buildDataTable() {
     comp.cornerRadius = 12;
     comp.clipsContent = true;
     comp.resize(WIDTH, 1);
+    // Re-apply AFTER resize so children grow height (FIXED width, HUG height).
+    comp.counterAxisSizingMode = 'FIXED';
+    comp.primaryAxisSizingMode = 'AUTO';
 
     // ---- Toolbar ----------------------------------------------------------
     const toolbar = figma.createFrame();

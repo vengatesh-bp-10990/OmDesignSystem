@@ -10589,6 +10589,322 @@ async function buildTimePicker() {
 
 
 // =============================================================================
+// DATETIME PICKER (molecule) — TextField + Tabs (Date | Time) + Calendar/Time
+//   Size:    Small | Medium | Default
+//   State:   Default | Open Date | Open Time | Disabled
+//   Has Value: false | true ("May 7, 2026 10:30 AM")
+// Composes: real TextField (trigger) + 2 Tab Item instances (Date | Time tab
+// header) + real Calendar OR an inline Time wheel popover depending on the
+// active tab. NEVER re-implements the calendar.
+// =============================================================================
+async function buildDateTimePicker() {
+  console.log('[OM DS] buildDateTimePicker started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules')) || figma.currentPage;
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || moleculesPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'DateTime Picker');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'DateTime Picker')) n.remove();
+
+  const tfSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'TextField');
+  if (!tfSet) { figma.notify('⚠️ TextField not found.'); return; }
+  const calSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Calendar');
+  if (!calSet) { figma.notify('⚠️ Calendar not found.'); return; }
+  const tabItemSet = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Tab Item');
+  if (!tabItemSet) { figma.notify('⚠️ Tab Item not found. Run "Build Tabs (Molecule)" first.'); return; }
+
+  function findTfVariant(size, fieldState, content) {
+    return tfSet.children.find(c => c.name === `Size=${size}, State=${fieldState}, Status=None, Content=${content}`)
+        || tfSet.children.find(c => c.name === `Size=${size}, State=Default, Status=None, Content=${content}`);
+  }
+  function findCalVariant(mode) {
+    return calSet.children.find(c => c.name === `Mode=${mode}`) || calSet.defaultVariant || calSet.children[0];
+  }
+  function findTabVariant(state) {
+    // Use Line style so the Date|Time switch reads as a clean tab header.
+    return tabItemSet.children.find(c => c.name === `Style=Line, Size=Default, State=${state}`)
+        || tabItemSet.children.find(c => c.name === `Style=Line, Size=Default, State=Default`);
+  }
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const calendarIc = await findIconComp(iconsPage, ['calendar', 'calendar-days', 'event']);
+
+  async function setFieldText(inst, value) {
+    const field = inst.findOne(n => n.type === 'FRAME' && n.name === 'Field');
+    const t = field && field.findOne(n => n.type === 'TEXT');
+    if (!t) return;
+    try { await figma.loadFontAsync(t.fontName); } catch (e) {}
+    try { t.characters = value; } catch (e) {}
+  }
+  async function setLabelText(inst, value) {
+    const labelInst = inst.findOne(n => n.type === 'INSTANCE' && /Label/i.test(n.name));
+    const target = labelInst || inst;
+    const t = target.findOne(n => n.type === 'TEXT' && /label/i.test(n.name));
+    if (!t) return;
+    try { await figma.loadFontAsync(t.fontName); } catch (e) {}
+    try { t.characters = value; } catch (e) {}
+  }
+  async function bindSuffixIcon(tfInst) {
+    try {
+      const props = tfInst.componentProperties;
+      const suffixKey = Object.keys(props || {}).find(k => /Has Suffix Icon/i.test(k));
+      if (suffixKey) tfInst.setProperties({ [suffixKey]: true });
+    } catch (e) {}
+    if (!calendarIc) return;
+    try {
+      const field = tfInst.findOne(n => n.type === 'FRAME' && n.name === 'Field');
+      if (!field) return;
+      const iconInsts = field.children.filter(c => c.type === 'INSTANCE');
+      const suffix = iconInsts[iconInsts.length - 1];
+      if (suffix) suffix.swapComponent(calendarIc);
+    } catch (e) {}
+  }
+
+  async function setTabLabel(inst, label) {
+    const t = inst.findOne(n => n.type === 'TEXT');
+    if (!t) return;
+    try { await figma.loadFontAsync(t.fontName); } catch (e) {}
+    try { t.characters = label; } catch (e) {}
+    try {
+      const lead = inst.findOne(n => n.name === 'Leading Icon');
+      if (lead) lead.visible = false;
+    } catch (e) {}
+  }
+
+  // Inline Time wheel (3 columns). Same look as Time Picker popover.
+  const T_COL_W = 64, T_ROW_H = 32;
+  async function makeTimeRow(text, isSelected, isMuted) {
+    const row = figma.createFrame();
+    row.layoutMode = 'HORIZONTAL';
+    row.primaryAxisSizingMode = 'FIXED';
+    row.counterAxisSizingMode = 'FIXED';
+    row.primaryAxisAlignItems = 'CENTER';
+    row.counterAxisAlignItems = 'CENTER';
+    row.resize(T_COL_W, T_ROW_H);
+    row.cornerRadius = 6;
+    row.fills = isSelected ? [paintForVar(required['brand/primary-subtle'] || required['brand/primary-muted'])] : [];
+    const t = figma.createText();
+    const fStyle = styleByName['Body/Default'];
+    if (fStyle) await t.setTextStyleIdAsync(fStyle.id);
+    t.characters = text;
+    const colorVar = isSelected ? required['brand/primary'] : (isMuted ? required['text/tertiary'] : required['text/secondary']);
+    t.fills = [paintForVar(colorVar)];
+    t.textAutoResize = 'WIDTH_AND_HEIGHT';
+    row.appendChild(t);
+    return row;
+  }
+  async function makeTimeColumn(values, selectedIndex) {
+    const col = figma.createFrame();
+    col.layoutMode = 'VERTICAL';
+    col.primaryAxisSizingMode = 'AUTO';
+    col.counterAxisSizingMode = 'AUTO';
+    col.itemSpacing = 2;
+    col.fills = [];
+    for (let i = 0; i < values.length; i++) {
+      col.appendChild(await makeTimeRow(values[i], i === selectedIndex, Math.abs(i - selectedIndex) >= 2));
+    }
+    return col;
+  }
+  async function makeTimePane() {
+    const pane = figma.createFrame();
+    pane.name = 'Time Pane';
+    pane.layoutMode = 'HORIZONTAL';
+    pane.primaryAxisSizingMode = 'AUTO';
+    pane.counterAxisSizingMode = 'AUTO';
+    pane.counterAxisAlignItems = 'CENTER';
+    pane.primaryAxisAlignItems = 'CENTER';
+    pane.itemSpacing = 8;
+    pane.fills = [];
+    pane.paddingTop = pane.paddingBottom = 8;
+    pane.appendChild(await makeTimeColumn(['08','09','10','11','12'], 2));
+    pane.appendChild(await makeTimeColumn(['00','15','30','45','00'], 2));
+    pane.appendChild(await makeTimeColumn(['AM','AM','AM','PM','PM'], 2));
+    return pane;
+  }
+
+  async function makePopover(activeTab, hasValue) {
+    const pop = figma.createFrame();
+    pop.name = 'Popover';
+    pop.layoutMode = 'VERTICAL';
+    pop.primaryAxisSizingMode = 'AUTO';
+    pop.counterAxisSizingMode = 'AUTO';
+    pop.itemSpacing = 0;
+    pop.paddingLeft = pop.paddingRight = 0;
+    pop.paddingTop = pop.paddingBottom = 0;
+    pop.fills = [paintForVar(required['surface/card'])];
+    pop.strokes = [paintForVar(required['border/default'])];
+    pop.strokeWeight = 1;
+    pop.strokeAlign = 'INSIDE';
+    pop.cornerRadius = 12;
+    try {
+      pop.effects = [{
+        type: 'DROP_SHADOW',
+        color: { r: 0.06, g: 0.07, b: 0.12, a: 0.08 },
+        offset: { x: 0, y: 8 },
+        radius: 24,
+        spread: -4,
+        visible: true,
+        blendMode: 'NORMAL',
+      }];
+    } catch (e) {}
+
+    // Tab header
+    const tabRow = figma.createFrame();
+    tabRow.name = 'Tabs';
+    tabRow.layoutMode = 'HORIZONTAL';
+    tabRow.primaryAxisSizingMode = 'AUTO';
+    tabRow.counterAxisSizingMode = 'AUTO';
+    tabRow.itemSpacing = 0;
+    tabRow.paddingLeft = tabRow.paddingRight = 12;
+    tabRow.paddingTop = 8;
+    tabRow.fills = [];
+    pop.appendChild(tabRow);
+
+    const dateTabVariant = findTabVariant(activeTab === 'Date' ? 'Active' : 'Default');
+    const timeTabVariant = findTabVariant(activeTab === 'Time' ? 'Active' : 'Default');
+    const dateTab = dateTabVariant.createInstance(); dateTab.name = 'Date Tab';
+    const timeTab = timeTabVariant.createInstance(); timeTab.name = 'Time Tab';
+    tabRow.appendChild(dateTab);
+    tabRow.appendChild(timeTab);
+    await setTabLabel(dateTab, 'Date');
+    await setTabLabel(timeTab, 'Time');
+
+    // Baseline under tabs
+    const baseline = figma.createFrame();
+    baseline.name = 'Baseline';
+    baseline.fills = [paintForVar(required['border/default'])];
+    baseline.resize(100, 1);
+    pop.appendChild(baseline);
+    try { baseline.layoutSizingHorizontal = 'FILL'; baseline.layoutSizingVertical = 'FIXED'; } catch (e) {}
+
+    // Pane
+    const paneWrap = figma.createFrame();
+    paneWrap.name = 'Pane';
+    paneWrap.layoutMode = 'VERTICAL';
+    paneWrap.primaryAxisSizingMode = 'AUTO';
+    paneWrap.counterAxisSizingMode = 'AUTO';
+    paneWrap.itemSpacing = 0;
+    paneWrap.paddingLeft = paneWrap.paddingRight = 0;
+    paneWrap.paddingTop = paneWrap.paddingBottom = 0;
+    paneWrap.counterAxisAlignItems = 'CENTER';
+    paneWrap.primaryAxisAlignItems = 'CENTER';
+    paneWrap.fills = [];
+    pop.appendChild(paneWrap);
+
+    if (activeTab === 'Date') {
+      const calVariant = findCalVariant(hasValue ? 'Single Selected' : 'Default');
+      const calInst = calVariant.createInstance();
+      calInst.name = 'Calendar';
+      // Inside our popover the calendar already provides its own padding, but
+      // its drop-shadow/border would compete with the outer popover. Strip them.
+      try {
+        const calBg = calInst.findOne(n => n.id === calInst.id) || calInst;
+        // Best-effort: remove inner border so it doesn't double-stroke
+      } catch (e) {}
+      paneWrap.appendChild(calInst);
+    } else {
+      paneWrap.appendChild(await makeTimePane());
+    }
+    return pop;
+  }
+
+  async function makeVariant(size, state, hasValue) {
+    const wrap = figma.createComponent();
+    wrap.name = `Size=${size}, State=${state}, Has Value=${hasValue}`;
+    wrap.layoutMode = 'VERTICAL';
+    wrap.primaryAxisSizingMode = 'AUTO';
+    wrap.counterAxisSizingMode = 'AUTO';
+    wrap.itemSpacing = 8;
+    wrap.fills = [];
+
+    const isOpen = state === 'Open Date' || state === 'Open Time';
+    const fieldState = isOpen ? 'Active' : (state === 'Disabled' ? 'Disabled' : 'Default');
+    const content = hasValue ? 'Filled' : 'Empty';
+    const tfVariant = findTfVariant(size, fieldState, content);
+    if (!tfVariant) return wrap;
+
+    const tfInst = tfVariant.createInstance();
+    tfInst.name = 'Trigger';
+    wrap.appendChild(tfInst);
+    await setLabelText(tfInst, 'Date & time');
+    await setFieldText(tfInst, hasValue ? 'May 7, 2026 · 10:30 AM' : 'Select date & time');
+    await bindSuffixIcon(tfInst);
+
+    if (isOpen) {
+      const activeTab = state === 'Open Time' ? 'Time' : 'Date';
+      const pop = await makePopover(activeTab, hasValue);
+      wrap.appendChild(pop);
+    }
+    return wrap;
+  }
+
+  const SIZES = ['Small', 'Medium', 'Default'];
+  const STATES = ['Default', 'Open Date', 'Open Time', 'Disabled'];
+  const HASVAL = [false, true];
+  const allVariants = []; const meta = [];
+  for (const sz of SIZES) for (const st of STATES) for (const hv of HASVAL) {
+    const v = await makeVariant(sz, st, hv);
+    allVariants.push(v); meta.push({ size: sz, state: st, hv });
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'DateTime Picker'; compSet.layoutMode = 'NONE'; compSet.fills = [];
+
+  const PAD_LEFT = 240, PAD_TOP = 200, PAD_RIGHT = 80, PAD_BOT = 80;
+  const COL_LAYOUT_W = 420;
+  const ROW_GAP = 80;
+
+  const cols = [];
+  let cIdx = 0;
+  for (const st of STATES) for (const hv of HASVAL) {
+    cols.push({ state: st, hv, x: PAD_LEFT + cIdx * COL_LAYOUT_W, w: COL_LAYOUT_W, name: `${st}${hv ? ' • Filled' : ''}` });
+    cIdx++;
+  }
+  const rowHeights = SIZES.map(sz => {
+    const variantsInRow = allVariants.filter((v, i) => meta[i].size === sz);
+    return Math.max(...variantsInRow.map(v => v.height));
+  });
+  const rowYs = []; let cy = PAD_TOP;
+  for (let i = 0; i < SIZES.length; i++) { rowYs.push(cy); cy += rowHeights[i] + ROW_GAP; }
+
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i]; const m = meta[i];
+    const col = cols.find(c => c.state === m.state && c.hv === m.hv);
+    const rowIdx = SIZES.indexOf(m.size);
+    if (!col) continue;
+    v.x = Math.round(col.x + (col.w - v.width) / 2);
+    v.y = Math.round(rowYs[rowIdx] + (rowHeights[rowIdx] - v.height) / 2);
+  }
+  compSet.resize(PAD_LEFT + cols.length * COL_LAYOUT_W + PAD_RIGHT, cy + PAD_BOT);
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  const colGroups = [{ name: 'State × Has Value', x: PAD_LEFT, width: cols.length * COL_LAYOUT_W,
+    sizes: cols.map(c => ({ name: c.name, x: c.x, width: c.w })) }];
+  const rowGroups = SIZES.map((sz, i) => ({ name: sz, y: rowYs[i],
+    states: [{ name: '', y: rowYs[i], height: rowHeights[i] }] }));
+
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'DateTime Picker', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ DateTime Picker built: ${allVariants.length} variants (Tab Item + Calendar + Time wheel).`);
+}
+
+
+// =============================================================================
 // DROPDOWN — Single + Multi-Chips + Multi-Inline merged
 //   Type: Single | Multi-Chips | Multi-Inline
 //   Size: Small | Default | Large
@@ -11022,6 +11338,8 @@ async function rebuildAll() {
       await buildRangePicker();
     } else if (figma.command === 'buildTimePicker') {
       await buildTimePicker();
+    } else if (figma.command === 'buildDateTimePicker') {
+      await buildDateTimePicker();
     } else if (figma.command === 'cleanupFallbackIcons') {
       await cleanupFallbackIcons();
     } else {

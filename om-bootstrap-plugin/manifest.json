@@ -42,6 +42,7 @@
     { "name": "Build Date Picker (Molecule)", "command": "buildDatePicker" },
     { "name": "Build Range Picker (Molecule)", "command": "buildRangePicker" },
     { "name": "Build Time Picker (Molecule)", "command": "buildTimePicker" },
+    { "name": "Build DateTime Picker (Molecule)", "command": "buildDateTimePicker" },
     { "name": "Cleanup _glyph Fallback Icons", "command": "cleanupFallbackIcons" },
     { "name": "Reset Text Styles", "command": "resetTextStyles" },
     { "name": "Reset (Delete OM Collections)", "command": "reset" }

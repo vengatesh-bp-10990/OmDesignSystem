@@ -11816,6 +11816,19 @@ async function buildEmptyState() {
       const ic = inboxIc.createInstance();
       resizeIconInstance(ic, spec.icon);
       bindIconColorForm(ic, required['icon/subtle']);
+      // Reduce stroke weight on rescaled icons so larger sizes don't look chunky.
+      // Source icons are 24px; aim for visual stroke ≈ 1.5–2px regardless of render size.
+      try {
+        const targetStroke = spec.icon >= 64 ? 1.5 : spec.icon >= 40 ? 1.75 : 2;
+        const vectors = ic.findAllWithCriteria
+          ? ic.findAllWithCriteria({ types: ['VECTOR', 'LINE', 'ELLIPSE', 'RECTANGLE', 'POLYGON', 'STAR', 'BOOLEAN_OPERATION', 'FRAME'] })
+          : [];
+        for (const v of vectors) {
+          if (v.strokes && v.strokes.length > 0 && typeof v.strokeWeight === 'number') {
+            try { v.strokeWeight = targetStroke; } catch (e) {}
+          }
+        }
+      } catch (e) {}
       iconWrap.appendChild(ic);
     }
     wrap.appendChild(iconWrap);

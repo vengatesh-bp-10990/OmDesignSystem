@@ -12780,6 +12780,258 @@ async function buildComponentTokens() {
 }
 
 // =============================================================================
+// PAGE HEADER (Organism) — Phase 5
+// Composes: Breadcrumb (optional), Title cluster (H1/H2 + subtitle), Actions
+// cluster (SearchBar + Button instances), optional Tabs row.
+// Variants: Layout = Default | With-Tabs | With-Search-Tabs (3)
+//           Density = Default | Compact (2)
+// = 6 variants. Width fixed at 1280.
+// =============================================================================
+async function buildPageHeader() {
+  console.log('[OM DS] buildPageHeader started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens('PageHeader');
+
+  const organismsPage = figma.root.children.find(p => p.name.includes('Organisms')) || figma.currentPage;
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'));
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms'));
+  await figma.setCurrentPageAsync(organismsPage);
+
+  // Idempotency
+  const _exist = organismsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Page Header');
+  if (_exist) _exist.remove();
+  for (const n of organismsPage.children.filter(c => c.type === 'FRAME' && c.name === 'Page Header — Showcase')) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
+
+  // Locate dependency components
+  const buttonSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Button');
+  const breadcrumbSet = moleculesPage && moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Breadcrumb');
+  const searchBarSet = moleculesPage && moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && (n.name === 'Search Bar' || n.name === 'SearchBar'));
+  const tabsSet = moleculesPage && moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Tabs');
+
+  function findButton(color, size, state) {
+    if (!buttonSet) return null;
+    return buttonSet.children.find(c => c.name === `Type=Default, Color=${color}, Size=${size}, State=${state}`)
+        || buttonSet.children.find(c => c.name === `Type=Default, Color=${color}, Size=Default, State=Default`);
+  }
+  function findBreadcrumb() {
+    if (!breadcrumbSet) return null;
+    return breadcrumbSet.children.find(c => /Size=Default/.test(c.name) && /State=Default/.test(c.name)) || breadcrumbSet.children[0];
+  }
+  function findSearchBar() {
+    if (!searchBarSet) return null;
+    return searchBarSet.children.find(c => /Size=Default/.test(c.name) && /State=Default/.test(c.name) && /Content=Empty/.test(c.name))
+        || searchBarSet.children[0];
+  }
+  function findTabs() {
+    if (!tabsSet) return null;
+    return tabsSet.children.find(c => /Variant=Line/.test(c.name) && /Size=Default/.test(c.name))
+        || tabsSet.children[0];
+  }
+  async function setButtonText(inst, txt) {
+    const t = inst.findOne(n => n.type === 'TEXT');
+    if (!t) return;
+    try { await figma.loadFontAsync(t.fontName); } catch (e) {}
+    try { t.characters = txt; } catch (e) {}
+  }
+
+  const WIDTH = 1280;
+
+  // Build a single variant
+  async function buildVariant(layout, density) {
+    const isCompact = density === 'Compact';
+    const showTabs = layout === 'With-Tabs' || layout === 'With-Search-Tabs';
+    const showSearch = layout === 'With-Search-Tabs';
+
+    const pad = isCompact ? 16 : 24;
+    const titleStyle = isCompact ? 'Heading/H2' : 'Heading/H1';
+    const sectionGap = isCompact ? 12 : 16;
+
+    const comp = figma.createComponent();
+    comp.name = `Layout=${layout}, Density=${density}`;
+    comp.layoutMode = 'VERTICAL';
+    comp.primaryAxisSizingMode = 'AUTO';
+    comp.counterAxisSizingMode = 'FIXED';
+    comp.itemSpacing = sectionGap;
+    comp.paddingLeft = comp.paddingRight = pad;
+    comp.paddingTop = comp.paddingBottom = pad;
+    comp.fills = [paintForVar(required['surface/card'] || required['surface/base'])];
+    comp.strokes = [paintForVar(required['border/default'])];
+    comp.strokeWeight = 1;
+    comp.strokeAlign = 'INSIDE';
+    comp.strokeBottomWeight = 1;
+    comp.strokeTopWeight = 0;
+    comp.strokeLeftWeight = 0;
+    comp.strokeRightWeight = 0;
+    comp.resize(WIDTH, 100);
+
+    // Row 1: Breadcrumb
+    const bcVariant = findBreadcrumb();
+    if (bcVariant) {
+      const bc = bcVariant.createInstance();
+      comp.appendChild(bc);
+      try { bc.layoutSizingHorizontal = 'HUG'; } catch (e) {}
+    }
+
+    // Row 2: Title row
+    const titleRow = figma.createFrame();
+    titleRow.name = 'Title Row';
+    titleRow.layoutMode = 'HORIZONTAL';
+    titleRow.primaryAxisSizingMode = 'FIXED';
+    titleRow.counterAxisSizingMode = 'AUTO';
+    titleRow.primaryAxisAlignItems = 'SPACE_BETWEEN';
+    titleRow.counterAxisAlignItems = 'CENTER';
+    titleRow.itemSpacing = 16;
+    titleRow.fills = [];
+    comp.appendChild(titleRow);
+    try { titleRow.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    // Title cluster (left)
+    const titleCluster = figma.createFrame();
+    titleCluster.name = 'Title Cluster';
+    titleCluster.layoutMode = 'VERTICAL';
+    titleCluster.primaryAxisSizingMode = 'AUTO';
+    titleCluster.counterAxisSizingMode = 'AUTO';
+    titleCluster.itemSpacing = 4;
+    titleCluster.fills = [];
+    titleRow.appendChild(titleCluster);
+    try { titleCluster.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    const title = figma.createText();
+    const ts = styleByName[titleStyle];
+    if (ts) await title.setTextStyleIdAsync(ts.id);
+    title.characters = 'Customer Insights';
+    title.fills = [paintForVar(required['text/primary'])];
+    titleCluster.appendChild(title);
+
+    if (!isCompact) {
+      const sub = figma.createText();
+      const ss = styleByName['Body/Default'];
+      if (ss) await sub.setTextStyleIdAsync(ss.id);
+      sub.characters = 'Track engagement, satisfaction, and growth across all segments.';
+      sub.fills = [paintForVar(required['text/secondary'])];
+      titleCluster.appendChild(sub);
+      try { sub.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    }
+
+    // Actions cluster (right)
+    const actions = figma.createFrame();
+    actions.name = 'Actions';
+    actions.layoutMode = 'HORIZONTAL';
+    actions.primaryAxisSizingMode = 'AUTO';
+    actions.counterAxisSizingMode = 'AUTO';
+    actions.counterAxisAlignItems = 'CENTER';
+    actions.itemSpacing = 8;
+    actions.fills = [];
+    titleRow.appendChild(actions);
+
+    if (showSearch) {
+      const sb = findSearchBar();
+      if (sb) {
+        const sbI = sb.createInstance();
+        actions.appendChild(sbI);
+        try { sbI.resize(280, sbI.height); } catch (e) {}
+      }
+    }
+    const secondaryBtn = findButton('Secondary', 'Default', 'Default');
+    if (secondaryBtn) {
+      const inst = secondaryBtn.createInstance();
+      actions.appendChild(inst);
+      await setButtonText(inst, 'Export');
+    }
+    const primaryBtn = findButton('Primary', 'Default', 'Default');
+    if (primaryBtn) {
+      const inst = primaryBtn.createInstance();
+      actions.appendChild(inst);
+      await setButtonText(inst, 'New report');
+    }
+
+    // Row 3: Tabs (optional)
+    if (showTabs) {
+      const tv = findTabs();
+      if (tv) {
+        const ti = tv.createInstance();
+        comp.appendChild(ti);
+        try { ti.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+      }
+    }
+
+    return comp;
+  }
+
+  const LAYOUTS = ['Default', 'With-Tabs', 'With-Search-Tabs'];
+  const DENSITIES = ['Default', 'Compact'];
+  const variants = [];
+  for (const layout of LAYOUTS) {
+    for (const density of DENSITIES) {
+      const v = await buildVariant(layout, density);
+      variants.push(v);
+    }
+  }
+
+  const compSet = figma.combineAsVariants(variants, organismsPage);
+  compSet.name = 'Page Header';
+  compSet.layoutMode = 'VERTICAL';
+  compSet.itemSpacing = 24;
+  compSet.paddingLeft = compSet.paddingRight = 32;
+  compSet.paddingTop = compSet.paddingBottom = 32;
+  compSet.primaryAxisSizingMode = 'AUTO';
+  compSet.counterAxisSizingMode = 'AUTO';
+  compSet.fills = [paintForVar(required['surface/base'])];
+  compSet.strokes = [paintForVar(required['border/default'])];
+  compSet.strokeWeight = 1;
+  compSet.cornerRadius = 16;
+
+  // Showcase
+  const showcase = figma.createFrame();
+  showcase.name = 'Page Header — Showcase';
+  showcase.layoutMode = 'VERTICAL';
+  showcase.itemSpacing = 32;
+  showcase.paddingLeft = showcase.paddingRight = 48;
+  showcase.paddingTop = showcase.paddingBottom = 48;
+  showcase.primaryAxisSizingMode = 'AUTO';
+  showcase.counterAxisSizingMode = 'AUTO';
+  showcase.fills = [paintForVar(required['surface/base'])];
+  organismsPage.appendChild(showcase);
+  showcase.x = compSet.x + compSet.width + 100;
+  showcase.y = compSet.y;
+
+  const heading = figma.createText();
+  const hs = styleByName['Heading/H1'];
+  if (hs) await heading.setTextStyleIdAsync(hs.id);
+  heading.characters = 'Page Header';
+  heading.fills = [paintForVar(required['text/primary'])];
+  showcase.appendChild(heading);
+
+  const sub = figma.createText();
+  const ss = styleByName['Body/Default'];
+  if (ss) await sub.setTextStyleIdAsync(ss.id);
+  sub.characters = 'Top-of-page region: Breadcrumb + Title + Actions, with optional Search and Tabs.';
+  sub.fills = [paintForVar(required['text/secondary'])];
+  showcase.appendChild(sub);
+
+  for (const v of variants) {
+    const label = figma.createText();
+    const ls = styleByName['Heading/H4'];
+    if (ls) await label.setTextStyleIdAsync(ls.id);
+    label.characters = v.name;
+    label.fills = [paintForVar(required['text/secondary'])];
+    showcase.appendChild(label);
+    const inst = v.createInstance();
+    showcase.appendChild(inst);
+  }
+
+  console.log(`[OM DS] Page Header variants built: ${variants.length}`);
+  figma.notify(`✅ Page Header: ${variants.length} variants built.`);
+}
+
+// =============================================================================
 // BUILD ALL WIRED — single command that:
 //   1. Ensures all Component/{Name} collections + aliases exist.
 //   2. Rebuilds every component in dependency order so layers bind directly to
@@ -12835,6 +13087,7 @@ async function buildAllWired() {
     { name: 'Stepper',         fn: typeof buildStepper         === 'function' ? buildStepper         : null },
     { name: 'Sidebar',         fn: typeof buildSidebar         === 'function' ? buildSidebar         : null },
     { name: 'EmptyState',      fn: typeof buildEmptyState      === 'function' ? buildEmptyState      : null },
+    { name: 'PageHeader',      fn: typeof buildPageHeader      === 'function' ? buildPageHeader      : null },
   ];
 
   const ok = []; const failed = [];
@@ -12946,6 +13199,8 @@ async function buildAllWired() {
       await buildSidebar();
     } else if (figma.command === 'buildEmptyState') {
       await buildEmptyState();
+    } else if (figma.command === 'buildPageHeader') {
+      await buildPageHeader();
     } else if (figma.command === 'cleanupFallbackIcons') {
       await cleanupFallbackIcons();
     } else {

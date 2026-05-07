@@ -47,6 +47,7 @@
     { "name": "Build Stepper (Molecule)", "command": "buildStepper" },
     { "name": "Build Sidebar (Molecule)", "command": "buildSidebar" },
     { "name": "Build Empty State (Molecule)", "command": "buildEmptyState" },
+    { "name": "Build Page Header (Organism)", "command": "buildPageHeader" },
     { "name": "Build Component Tokens (All — backfill aliases)", "command": "buildComponentTokens" },
     { "name": "Build All Wired (Single Build — all components → Component/X)", "command": "buildAllWired" },
     { "name": "Cleanup _glyph Fallback Icons", "command": "cleanupFallbackIcons" },

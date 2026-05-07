@@ -1,71 +1,57 @@
 # OM Design System — Build Plan
 
-## Deferred refactor (after Phase 4 complete)
-**Per-component token backfill (Option A)** — currently Label, Chip, TextField, Textarea, Dropdown and ALL Phase 4 molecules bind directly to semantic `_Appearance`/`_Theme` tokens via `resolveFormTokens()`. This violates the locked "layers bind to `Component/{Name}/...` only" rule. Plan: finish all molecules first, then add `Component/{Label, Chip, TextField, Textarea, Dropdown, MenuItem, DropdownMenu, SearchBar, Breadcrumb, Tabs, Pagination, Card, Alert, Toast, Progress, Skeleton, Accordion, Tag, ...Pickers}` collections aliasing the existing semantic vars, rewire each builder, then full rebuild. Aliases preserve visuals → zero design risk. See `/memories/session/token-refactor-deferred.md`.
+## Status (as of May 7 2026)
 
-## Status (as of last session)
+### ✅ Phase 1 — Foundations
+- Pages, variable collections, text styles
+- 383 icons as components
 
-### ✅ Completed
-- Phase 1.1: pages, collections, text styles
-- Phase 2: 383 icons as components
-- Phase 3 atoms:
-  - Button (~440 variants)
-  - Checkbox (108)
-  - Radio (72)
-  - Toggle (72)
-  - Badge (~120)
-  - Tooltip (32)
-  - Avatar Single + Group (~75)
-  - Label (2)
-  - Chip (4)
-  - TextField (42)
-  - Textarea (14)
-  - Dropdown (~150)
+### ✅ Phase 2 — Atoms
+Button (~440), IconButton, SplitButton, Checkbox (108), Radio (72), Toggle (72),
+Badge (~120), Tooltip (64), Avatar single+group (~93), Label, Chip,
+TextField (56), Textarea, Dropdown (~200), Divider, Spinner, Day Cell,
+Tab Item, Menu Item, Progress, Skeleton.
 
-### ⏳ Pending atoms
-- **Tag** (DEFERRED) — when needed, will be done by extending Chip with Color × Style axes rather than a new component. User decision May 7 2026.
+### ✅ Phase 3 — Molecules
+Dropdown Menu, Search Bar (20), Breadcrumb (20), Tabs, Pagination, Card,
+Alert, Toast, Accordion, Calendar, Date Picker, Range Picker, Time Picker,
+DateTime Picker, Modal, Stepper, Sidebar (8 states), Empty State.
 
-### ✅ Phase 3 atoms — COMPLETE (May 7 2026)
-- Tooltip Heading axis added (4×2×2×2×2 = 64 variants)
-- Divider: 4 variants (Orientation × Style) + Has Label boolean
-- Spinner: 15 variants (Size × Color) + Has Label boolean
+### ✅ Phase 4 — Token wiring (commit `e469cf1`, May 7 2026)
+- `buildComponentTokens` creates 30 `Component/X` collections aliasing semantic tokens.
+- `resolveFormTokens(componentName)` substitutes `Component/X` refs at bind time
+  (auto-creating missing collections/vars).
+- All 30+ builders patched; **`buildAllWired`** runs the full sequence in dependency order.
+- Last verified run: **37/37 ok, 0 failed** (commit `a345e7b`).
 
-### ⏳ Phase 4 — Molecules
-- ✅ Menu Item
-- ✅ Dropdown Menu
-- ✅ Search Bar
-- ✅ Breadcrumb
-- ✅ Tab Item (atom)
-- ✅ Pagination
-- ✅ Card
-- ✅ Alert
-- ✅ Toast
-- ✅ Progress
-- ✅ Skeleton
-- ✅ Accordion (Bordered + Inline × Default/Hover/Active = 6 variants)
-- ✅ **Tabs (molecule)** — 3 variants × 2 sizes × Full Width false/true = 12 (commit `899008e`, May 7 2026)
-  - `Line` = underline indicator + 1px baseline
-  - `Square` = soft neutral container (radius 8) + peach Active pill
-  - `Rounded` = grey container (radius 999) + white Active pill
-  - Composes real `Tab Item` instances; leading icon hidden inside instances for clean label-only bar
-- ⏳ **Next:** Date Picker family (Date / Range / Time / DateTime) — needs Calendar atom first
-- ⏳ Other potential molecules: Modal/Dialog, Stepper, Sidebar/Nav, Empty State
+### ⏳ Phase 4.5 — Page categorization fix (TODO, individual rebuilds)
+Move (page assignment in builder):
+- `Calendar` → Molecules
+- `Progress`, `Skeleton`, `Tab Item`, `Menu Item` → Atoms
 
-### ⏳ Phase 5 — Motion / Interactions
-Deferred to end of Phase 5.
+### ⏳ Phase 5 — Organisms (in progress)
+Build order:
+1. **Page Header** ⏳ NEXT
+2. Top Nav Bar
+3. Form Layout
+4. Data Table
 
-## Locked design rules — Form atoms (May 6 2026)
+### ⏳ Phase 6 — Polish (after organisms)
+- Calendar/Modal "spread parameter" warning — set `clipsContent=true` before shadow.
+- Documentation page (auto-generated component index + token table).
+- Motion / interaction specs.
+
+---
+
+## Locked design rules — Form atoms
 
 - Sizes match Button: XS=24, Small=28, Medium=32, Default=36 (no Large)
 - Padding: 8px all sizes
 - Vertical gap (Label ↔ Field ↔ Helper): 2px
-- Borders:
-  - Default = `border/strong`
-  - Hover = `text/secondary` (darker)
-  - Active/Focus = `brand/primary` (no drop shadow)
+- Borders: Default = `border/strong`, Hover = `text/secondary`, Active/Focus = `brand/primary` (no drop shadow)
 - Helper text hidden by default
 - Dropdown chips use neutral grey (`state/disabled-bg`), NOT brand colors
-- Dropdown disabled state uses Disabled chip variant via `chipFor(size, state)`
+- Disabled state never uses opacity — uses `state/disabled-bg/text/border`
 
 ## Form atom specs
 
@@ -87,5 +73,9 @@ CHIP_SIZE_SPECS:
 
 ## Critical fix notes
 
-- Chip Default must use `comp.layoutSizingVertical='FIXED'; comp.resize(comp.width, spec.h)` AT END after appendChild calls (otherwise counter-axis hugs to text height = 20px regardless of Default's 28h)
-- Dropdown field paddingTop/Bottom = 2 (was 6) so XS dropdown isn't crowded
+- Atomic composition: higher components must `createInstance()` of lower components — never re-implement an atom inline.
+- Tokens: layers bind to `Component/{Name}/...` only (via `resolveFormTokens(name)`).
+- Text styles: `await loadFontAsync` → `setTextStyleIdAsync` → set `.characters`. Never set `.fontName` after.
+- Sizing: `layoutSizingHorizontal/Vertical` AFTER `appendChild()`. For fixed counter-axis, restore AUTO sizing or `.resize()` AT END.
+- Idempotency: every `buildX()` removes its own previous COMPONENT_SET + showcase first.
+- Tag (deferred): when needed, extend Chip with Color × Style axes — not a new component.

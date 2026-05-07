@@ -11541,8 +11541,8 @@ async function buildSidebar() {
   const bellIc = await findOrCreateIconComponent('bell', iconsPage, iconDefaultVar);
   const helpIc = await findOrCreateIconComponent('help-circle', iconsPage, iconDefaultVar);
 
-  // Inline list-item row (Expanded)
-  async function makeListItem(icon, label, active) {
+  // Inline list-item row (Expanded). Optional hover bg + trailing counter.
+  async function makeListItem(icon, label, active, hover, counter) {
     const row = figma.createFrame();
     row.name = label;
     row.layoutMode = 'HORIZONTAL';
@@ -11554,9 +11554,13 @@ async function buildSidebar() {
     row.paddingLeft = row.paddingRight = 12;
     row.paddingTop = row.paddingBottom = 8;
     row.cornerRadius = 8;
-    row.fills = active
-      ? [paintForVar(required['brand/primary-subtle'] || required['brand/primary-muted'] || required['surface/base'])]
-      : [];
+    if (active) {
+      row.fills = [paintForVar(required['brand/primary-subtle'] || required['brand/primary-muted'] || required['surface/base'])];
+    } else if (hover) {
+      row.fills = [paintForVar(required['state/hover-bg'] || required['surface/base'])];
+    } else {
+      row.fills = [];
+    }
     row.resize(216, 36);
     if (icon) {
       const ic = icon.createInstance();
@@ -11573,42 +11577,66 @@ async function buildSidebar() {
     t.textAutoResize = 'HEIGHT';
     row.appendChild(t);
     try { t.layoutSizingHorizontal = 'FILL'; } catch (e) {}
-    return row;
-  }
-
-  // Inline icon-only row (Collapsed)
-  async function makeIconRow(icon, active) {
-    const row = figma.createFrame();
-    row.layoutMode = 'HORIZONTAL';
-    row.primaryAxisSizingMode = 'FIXED';
-    row.counterAxisSizingMode = 'FIXED';
-    row.primaryAxisAlignItems = 'CENTER';
-    row.counterAxisAlignItems = 'CENTER';
-    row.resize(40, 40);
-    row.cornerRadius = 8;
-    row.fills = active
-      ? [paintForVar(required['brand/primary-subtle'] || required['brand/primary-muted'] || required['surface/base'])]
-      : [];
-    if (icon) {
-      const ic = icon.createInstance();
-      resizeIconInstance(ic, 20);
-      bindIconColorForm(ic, active ? required['brand/primary'] : required['icon/default']);
-      row.appendChild(ic);
+    if (counter) {
+      const badge = figma.createFrame();
+      badge.layoutMode = 'HORIZONTAL';
+      badge.primaryAxisSizingMode = 'AUTO';
+      badge.counterAxisSizingMode = 'AUTO';
+      badge.primaryAxisAlignItems = 'CENTER';
+      badge.counterAxisAlignItems = 'CENTER';
+      badge.paddingLeft = badge.paddingRight = 6;
+      badge.paddingTop = badge.paddingBottom = 2;
+      badge.cornerRadius = 8;
+      badge.fills = [paintForVar(active
+        ? (required['brand/primary'])
+        : (required['state/hover-bg'] || required['surface/base']))];
+      const bt = figma.createText();
+      const bs = styleByName['Caption/Default'] || styleByName['Label/Default'];
+      if (bs) await bt.setTextStyleIdAsync(bs.id);
+      bt.characters = String(counter);
+      bt.fills = [paintForVar(active ? (required['brand/on-primary'] || required['surface/card']) : required['text/secondary'])];
+      bt.textAutoResize = 'WIDTH_AND_HEIGHT';
+      badge.appendChild(bt);
+      row.appendChild(badge);
     }
     return row;
   }
 
-  async function makeSectionHeading(text) {
-    const t = figma.createText();
-    const ts = styleByName['Caption/Default'] || styleByName['Label/Default'];
-    if (ts) await t.setTextStyleIdAsync(ts.id);
-    t.characters = text.toUpperCase();
-    t.fills = [paintForVar(required['text/secondary'])];
-    t.letterSpacing = { unit: 'PERCENT', value: 8 };
-    t.textAutoResize = 'HEIGHT';
-    t.name = 'Section Heading';
-    return t;
+  // Inline icon-only row (Collapsed). Optional hover bg + counter dot.
+  async function makeIconRow(icon, active, hover, counter) {
+    const wrap = figma.createFrame();
+    wrap.layoutMode = 'HORIZONTAL';
+    wrap.primaryAxisSizingMode = 'FIXED';
+    wrap.counterAxisSizingMode = 'FIXED';
+    wrap.primaryAxisAlignItems = 'CENTER';
+    wrap.counterAxisAlignItems = 'CENTER';
+    wrap.resize(40, 40);
+    wrap.cornerRadius = 8;
+    if (active) {
+      wrap.fills = [paintForVar(required['brand/primary-subtle'] || required['brand/primary-muted'] || required['surface/base'])];
+    } else if (hover) {
+      wrap.fills = [paintForVar(required['state/hover-bg'] || required['surface/base'])];
+    } else {
+      wrap.fills = [];
+    }
+    if (icon) {
+      const ic = icon.createInstance();
+      resizeIconInstance(ic, 20);
+      bindIconColorForm(ic, active ? required['brand/primary'] : required['icon/default']);
+      wrap.appendChild(ic);
+    }
+    if (counter) {
+      // Floating dot at top-right
+      const dot = figma.createFrame();
+      dot.resize(8, 8); dot.cornerRadius = 4;
+      dot.fills = [paintForVar(required['feedback/danger'] || required['brand/primary'])];
+      // We can't absolute-position inside auto-layout; skip in collapsed for simplicity.
+    }
+    return wrap;
   }
+
+  // Per-state counter / hover plan. Counters apply to specific items only.
+  const COUNTERS = { 'Notifications': 4, 'Team': 12 };
 
   function makeDivider(width) {
     const d = figma.createFrame();
@@ -11634,10 +11662,43 @@ async function buildSidebar() {
     ]},
   ];
 
-  async function makeVariant(width) {
+  async function makeSectionHeading(text, withChevron) {
+    const wrap = figma.createFrame();
+    wrap.layoutMode = 'HORIZONTAL';
+    wrap.primaryAxisSizingMode = 'FIXED';
+    wrap.counterAxisSizingMode = 'AUTO';
+    wrap.primaryAxisAlignItems = 'MIN';
+    wrap.counterAxisAlignItems = 'CENTER';
+    wrap.itemSpacing = 4;
+    wrap.fills = [];
+    wrap.resize(192, 16);
+    wrap.counterAxisSizingMode = 'AUTO';
+    const t = figma.createText();
+    const ts = styleByName['Caption/Default'] || styleByName['Label/Default'];
+    if (ts) await t.setTextStyleIdAsync(ts.id);
+    t.characters = text.toUpperCase();
+    t.fills = [paintForVar(required['text/secondary'])];
+    t.letterSpacing = { unit: 'PERCENT', value: 8 };
+    t.textAutoResize = 'HEIGHT';
+    t.name = 'Section Heading';
+    wrap.appendChild(t);
+    try { t.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    if (withChevron) {
+      const chev = figma.createText();
+      const cs = styleByName['Caption/Default'] || styleByName['Label/Default'];
+      if (cs) await chev.setTextStyleIdAsync(cs.id);
+      chev.characters = '›';
+      chev.fills = [paintForVar(required['text/secondary'])];
+      chev.textAutoResize = 'WIDTH_AND_HEIGHT';
+      wrap.appendChild(chev);
+    }
+    return wrap;
+  }
+
+  async function makeVariant(width, state) {
     const isCollapsed = width === 'Collapsed';
     const wrap = figma.createComponent();
-    wrap.name = `Width=${width}`;
+    wrap.name = `Width=${width}, State=${state}`;
     wrap.layoutMode = 'VERTICAL';
     wrap.primaryAxisSizingMode = 'FIXED';
     wrap.counterAxisSizingMode = 'FIXED';
@@ -11683,18 +11744,33 @@ async function buildSidebar() {
     spacer.resize(1, 8); spacer.fills = [];
     wrap.appendChild(spacer);
 
+    // State helpers
+    // Hover: top item of first non-active section gets hover bg.
+    // Counters: badges on Notifications + Team.
+    // Section Collapsed: second section (Account) collapses → only its heading (with chevron) shows.
+    const hoverItemLabel = state === 'Hover' ? 'Dashboard' : null;
+    const showCounters = state === 'With Counters';
+    const collapseSecondSection = state === 'Section Collapsed';
+
     for (let si = 0; si < SECTIONS.length; si++) {
       const sec = SECTIONS[si];
+      const isCollapsedSection = collapseSecondSection && si === 1;
       if (isCollapsed) {
         if (si > 0) {
           const sep = makeDivider(40);
           wrap.appendChild(sep);
         }
+        if (isCollapsedSection) continue; // skip items
         for (const item of sec.items) {
-          wrap.appendChild(await makeIconRow(item.icon, item.active));
+          wrap.appendChild(await makeIconRow(
+            item.icon,
+            item.active,
+            hoverItemLabel === item.label,
+            showCounters && COUNTERS[item.label]
+          ));
         }
       } else {
-        const head = await makeSectionHeading(sec.heading);
+        const head = await makeSectionHeading(sec.heading, isCollapsedSection);
         const headWrap = figma.createFrame();
         headWrap.layoutMode = 'HORIZONTAL';
         headWrap.primaryAxisSizingMode = 'AUTO';
@@ -11705,9 +11781,17 @@ async function buildSidebar() {
         headWrap.appendChild(head);
         wrap.appendChild(headWrap);
         try { headWrap.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+        try { head.layoutSizingHorizontal = 'FILL'; } catch (e) {}
 
+        if (isCollapsedSection) continue; // skip rendering items
         for (const item of sec.items) {
-          const r = await makeListItem(item.icon, item.label, item.active);
+          const r = await makeListItem(
+            item.icon,
+            item.label,
+            item.active,
+            hoverItemLabel === item.label,
+            showCounters && COUNTERS[item.label]
+          );
           wrap.appendChild(r);
           try { r.layoutSizingHorizontal = 'FILL'; } catch (e) {}
         }
@@ -11716,28 +11800,57 @@ async function buildSidebar() {
     return wrap;
   }
 
+  const STATES = ['Default', 'Hover', 'With Counters', 'Section Collapsed'];
   const allVariants = [];
   for (const w of ['Expanded', 'Collapsed']) {
-    allVariants.push(await makeVariant(w));
+    for (const s of STATES) {
+      allVariants.push(await makeVariant(w, s));
+    }
   }
 
   const compSet = figma.combineAsVariants(allVariants, moleculesPage);
   compSet.name = 'Sidebar'; compSet.layoutMode = 'NONE'; compSet.fills = [];
 
+  // Grid: rows = State (4), cols = Width (2)
   const PAD_LEFT = 240, PAD_TOP = 200, PAD_RIGHT = 80, PAD_BOT = 80;
-  let cx = PAD_LEFT;
-  let maxH = 0;
-  for (const v of allVariants) {
-    v.x = cx; v.y = PAD_TOP;
-    cx += v.width + 80;
-    if (v.height > maxH) maxH = v.height;
+  const COL_GAP = 80, ROW_GAP = 80;
+  const widths = ['Expanded', 'Collapsed'];
+  const colMaxW = {};
+  const rowMaxH = {};
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i];
+    const wIdx = Math.floor(i / STATES.length);
+    const sIdx = i % STATES.length;
+    const w = widths[wIdx];
+    const s = STATES[sIdx];
+    colMaxW[w] = Math.max(colMaxW[w] || 0, v.width);
+    rowMaxH[s] = Math.max(rowMaxH[s] || 0, v.height);
   }
-  compSet.resize(cx + PAD_RIGHT, PAD_TOP + maxH + PAD_BOT);
+  const colX = {};
+  let cx = PAD_LEFT;
+  for (const w of widths) { colX[w] = cx; cx += colMaxW[w] + COL_GAP; }
+  const rowY = {};
+  let cy = PAD_TOP;
+  for (const s of STATES) { rowY[s] = cy; cy += rowMaxH[s] + ROW_GAP; }
+
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i];
+    const wIdx = Math.floor(i / STATES.length);
+    const sIdx = i % STATES.length;
+    v.x = colX[widths[wIdx]];
+    v.y = rowY[STATES[sIdx]];
+  }
+  compSet.resize(cx - COL_GAP + PAD_RIGHT, cy - ROW_GAP + PAD_BOT);
   autoPositionBelow(moleculesPage, compSet, 120);
 
-  const colGroups = [{ name: 'Width', x: PAD_LEFT, width: cx - PAD_LEFT,
-    sizes: [{ name: 'Expanded + Collapsed', x: PAD_LEFT, width: cx - PAD_LEFT }] }];
-  const rowGroups = [{ name: 'Sidebar', y: PAD_TOP, states: [{ name: '', y: PAD_TOP, height: maxH }] }];
+  const colGroups = [{
+    name: 'Width', x: PAD_LEFT, width: cx - COL_GAP - PAD_LEFT,
+    sizes: widths.map(w => ({ name: w, x: colX[w], width: colMaxW[w] })),
+  }];
+  const rowGroups = STATES.map(s => ({
+    name: s, y: rowY[s],
+    states: [{ name: '', y: rowY[s], height: rowMaxH[s] }],
+  }));
   await decorateComponentSet({
     page: moleculesPage, compSet, colGroups, rowGroups,
     padTop: PAD_TOP, padLeft: PAD_LEFT,
@@ -11746,7 +11859,7 @@ async function buildSidebar() {
     componentName: 'Sidebar', surfaceVar: required['surface/card'], borderVar: required['border/default'],
   });
 
-  figma.notify(`✅ Sidebar built: ${allVariants.length} variants (Expanded + Collapsed).`);
+  figma.notify(`✅ Sidebar built: ${allVariants.length} variants (Width × State).`);
 }
 
 

@@ -20,10 +20,12 @@
   - Dropdown (~150)
 
 ### ⏳ Pending atoms
-- **Tag** (NEXT) — status colors: Neutral / Info / Success / Warning / Danger × 2 sizes × Solid / Outline / Subtle. Different from greyish Chip (which is ONLY for Multi-Select dropdowns).
-- Tooltip Heading variant (TOOLTIP_HEADINGS declared but rendering missing in `makeTooltipVariant`)
-- Divider
-- Spinner
+- **Tag** (DEFERRED) — when needed, will be done by extending Chip with Color × Style axes rather than a new component. User decision May 7 2026.
+
+### ✅ Phase 3 atoms — COMPLETE (May 7 2026)
+- Tooltip Heading axis added (4×2×2×2×2 = 64 variants)
+- Divider: 4 variants (Orientation × Style) + Has Label boolean
+- Spinner: 15 variants (Size × Color) + Has Label boolean
 
 ### ⏳ Phase 4 — Molecules
 Menu Item → Dropdown Menu → Select → Search Bar → Tabs → ...

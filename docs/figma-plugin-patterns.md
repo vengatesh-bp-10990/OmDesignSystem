@@ -30,3 +30,12 @@
 - Default = `border/strong` (visible neutral)
 - Hover = `text/secondary` (clearly darker than Default)
 - Don't use `border/default` for input rests — too light, looks unintentional
+
+## Deferred work
+- **Chip status colors / sizes** (May 7 2026): Current greyish Chip is enough for now. Tag merge deferred — when needed, extend Chip with Color (Neutral/Info/Success/Warning/Danger) × Style (Solid/Outline/Subtle) axes. Multi-Select Dropdown's `chipFor()` would pin Color=Neutral, Style=Subtle for backwards compat. Do NOT build a separate Tag component.
+
+## Phase 3 atoms — COMPLETE (May 7 2026)
+- Tooltip got Heading axis (4×2×2×2×2 = 64 variants). When Heading or Action present, bubble switches to VERTICAL layout with content row (icon+message) inside.
+- Divider: 4 variants (Orientation Horizontal/Vertical × Style Solid/Dashed) + Has Label boolean (horizontal only). Uses `figma.createLine()` with optional `dashPattern = [4, 4]`.
+- Spinner: 15 variants (Size × Color Brand/Neutral/On-Brand) + Has Label boolean. Ring = full ellipse track + ellipse with `arcData = { startingAngle: 0, endingAngle: 1.5π }` rotated -90° for the active 270° arc.
+- Manifest commands: `buildDivider`, `buildSpinner`

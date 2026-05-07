@@ -23,6 +23,8 @@
     { "name": "Build TextField", "command": "buildTextField" },
     { "name": "Build Textarea", "command": "buildTextarea" },
     { "name": "Build Dropdown", "command": "buildDropdown" },
+    { "name": "Build Divider", "command": "buildDivider" },
+    { "name": "Build Spinner", "command": "buildSpinner" },
     { "name": "Reset Text Styles", "command": "resetTextStyles" },
     { "name": "Reset (Delete OM Collections)", "command": "reset" }
   ]

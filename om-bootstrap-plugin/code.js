@@ -4372,26 +4372,28 @@ async function buildTooltip() {
     return v;
   }
 
-  async function makeTooltipVariant(placement, size, icon, action) {
+  async function makeTooltipVariant(placement, size, heading, icon, action) {
     const spec = TOOLTIP_SIZE_SPECS[size];
+    const hasHeading = heading === 'Heading';
 
     // Outer: pure FRAME with NO autolayout — we position the bubble + arrow
     // manually so the arrow can sit flush against the bubble edge.
     const outer = figma.createComponent();
-    outer.name = `Placement=${placement}, Size=${size}, Icon=${icon}, Action=${action}`;
+    outer.name = `Placement=${placement}, Size=${size}, Heading=${heading}, Icon=${icon}, Action=${action}`;
     outer.layoutMode = 'NONE';
     outer.fills = [];
     outer.clipsContent = false;
 
-    // Bubble — auto layout, fixed max width with text wrap.
+    // Bubble — VERTICAL when heading or action present (multi-row), else HORIZONTAL.
     const bubble = figma.createFrame();
     bubble.name = 'Bubble';
-    bubble.layoutMode = 'HORIZONTAL';
+    const stacked = hasHeading || action === 'Button';
+    bubble.layoutMode = stacked ? 'VERTICAL' : 'HORIZONTAL';
     bubble.primaryAxisSizingMode = 'AUTO';
     bubble.counterAxisSizingMode = 'AUTO';
-    bubble.primaryAxisAlignItems = 'CENTER';
-    bubble.counterAxisAlignItems = 'CENTER';
-    bubble.itemSpacing = spec.gap;
+    bubble.primaryAxisAlignItems = stacked ? 'MIN' : 'CENTER';
+    bubble.counterAxisAlignItems = stacked ? 'MIN' : 'CENTER';
+    bubble.itemSpacing = stacked ? spec.vGap : spec.gap;
     bubble.paddingLeft = bubble.paddingRight = spec.padX;
     bubble.paddingTop = bubble.paddingBottom = spec.padY;
     bubble.cornerRadius = spec.radius;
@@ -4400,13 +4402,50 @@ async function buildTooltip() {
     bubble.strokeWeight = 1;
     bubble.strokeAlign = 'INSIDE';
 
-    // Optional leading check icon
+    // Optional heading row (semibold, primary inverse text)
+    if (hasHeading) {
+      const hd = figma.createText();
+      const hStyle = styleByName[spec.headingFont];
+      if (hStyle) {
+        try { await figma.loadFontAsync(hStyle.fontName); } catch (e) {}
+        await hd.setTextStyleIdAsync(hStyle.id);
+      }
+      hd.characters = 'Need help?';
+      hd.fills = [paintFor(tt['text'])];
+      hd.name = 'Heading';
+      hd.textAutoResize = 'HEIGHT';
+      hd.resize(spec.maxTextWidth, hd.height);
+      bubble.appendChild(hd);
+      try { hd.layoutSizingHorizontal = 'FIXED'; hd.layoutSizingVertical = 'HUG'; } catch (e) {}
+    }
+
+    // Content row — icon + message side by side (only horizontal if there's an icon
+    // or if we're in horizontal bubble mode); otherwise the message goes directly
+    // in the bubble.
+    let msgParent = bubble;
+    if (stacked && icon === 'Check' && checkIconComp) {
+      const row = figma.createFrame();
+      row.name = 'Content';
+      row.layoutMode = 'HORIZONTAL';
+      row.primaryAxisSizingMode = 'AUTO';
+      row.counterAxisSizingMode = 'AUTO';
+      row.primaryAxisAlignItems = 'MIN';
+      row.counterAxisAlignItems = 'MIN';
+      row.itemSpacing = spec.gap;
+      row.paddingLeft = row.paddingRight = row.paddingTop = row.paddingBottom = 0;
+      row.fills = [];
+      bubble.appendChild(row);
+      try { row.layoutSizingHorizontal = 'HUG'; row.layoutSizingVertical = 'HUG'; } catch (e) {}
+      msgParent = row;
+    }
+
+    // Optional leading check icon (placed in msgParent so it sits inline with message)
     if (icon === 'Check' && checkIconComp) {
       const ic = checkIconComp.createInstance();
       ic.resize(spec.icon, spec.icon);
       try { ic.layoutSizingHorizontal = 'FIXED'; ic.layoutSizingVertical = 'FIXED'; } catch (e) {}
       bindIconColor(ic, tt['icon']);
-      bubble.appendChild(ic);
+      msgParent.appendChild(ic);
     }
 
     // Main message text — fixed max width with wrap
@@ -4417,11 +4456,11 @@ async function buildTooltip() {
       await label.setTextStyleIdAsync(fStyle.id);
     }
     label.characters = "Hello! I'm a Tooltip, here to help explain whatever you hover over.";
-    label.fills = [paintFor(tt['text'])];
+    label.fills = [paintFor(hasHeading ? tt['text-muted'] : tt['text'])];
     label.name = 'Message';
     label.textAutoResize = 'HEIGHT';
     label.resize(spec.maxTextWidth, label.height);
-    bubble.appendChild(label);
+    msgParent.appendChild(label);
     try { label.layoutSizingHorizontal = 'FIXED'; label.layoutSizingVertical = 'HUG'; } catch (e) {}
 
     // Optional Ghost button (uses your real Button/Ghost component)
@@ -4482,11 +4521,13 @@ async function buildTooltip() {
   const variantMeta = [];
   for (const placement of TOOLTIP_PLACEMENTS) {
     for (const size of TOOLTIP_SIZES) {
-      for (const icon of TOOLTIP_ICONS) {
-        for (const action of TOOLTIP_ACTIONS) {
-          const c = await makeTooltipVariant(placement, size, icon, action);
-          allVariants.push(c);
-          variantMeta.push({ placement, size, icon, action });
+      for (const heading of TOOLTIP_HEADINGS) {
+        for (const icon of TOOLTIP_ICONS) {
+          for (const action of TOOLTIP_ACTIONS) {
+            const c = await makeTooltipVariant(placement, size, heading, icon, action);
+            allVariants.push(c);
+            variantMeta.push({ placement, size, heading, icon, action });
+          }
         }
       }
     }
@@ -4503,12 +4544,15 @@ async function buildTooltip() {
 
   // Compute column widths from the widest variant in that column
   const colKeys = [];
-  for (const icon of TOOLTIP_ICONS) for (const action of TOOLTIP_ACTIONS) colKeys.push({ icon, action });
-  const colWidths = colKeys.map(({ icon, action }) => {
+  for (const heading of TOOLTIP_HEADINGS)
+    for (const icon of TOOLTIP_ICONS)
+      for (const action of TOOLTIP_ACTIONS)
+        colKeys.push({ heading, icon, action });
+  const colWidths = colKeys.map(({ heading, icon, action }) => {
     let w = 0;
     for (let i = 0; i < variantMeta.length; i++) {
       const m = variantMeta[i];
-      if (m.icon === icon && m.action === action) w = Math.max(w, allVariants[i].width);
+      if (m.heading === heading && m.icon === icon && m.action === action) w = Math.max(w, allVariants[i].width);
     }
     return w;
   });
@@ -4518,9 +4562,9 @@ async function buildTooltip() {
     for (const size of TOOLTIP_SIZES) {
       let rowH = 0;
       let x = PAD;
-      colKeys.forEach(({ icon, action }, ci) => {
+      colKeys.forEach(({ heading, icon, action }, ci) => {
         const idx = variantMeta.findIndex(m =>
-          m.placement === placement && m.size === size && m.icon === icon && m.action === action);
+          m.placement === placement && m.size === size && m.heading === heading && m.icon === icon && m.action === action);
         if (idx < 0) return;
         const node = allVariants[idx];
         node.x = x;
@@ -6156,6 +6200,395 @@ async function findChipComponent(size, state) {
 
 
 // =============================================================================
+// DIVIDER — visual separator
+//   Orientation: Horizontal | Vertical
+//   Style:       Solid | Dashed
+//   Booleans:    Has Label (horizontal only — text centered with rules on each side)
+//   Tokens:      stroke = border/default, label text = text/secondary
+// =============================================================================
+async function buildDivider() {
+  console.log('[OM DS] buildDivider started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || figma.currentPage;
+  await figma.setCurrentPageAsync(atomsPage);
+
+  // Idempotency
+  const _existSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Divider');
+  if (_existSet) _existSet.remove();
+  for (const n of atomsPage.children.filter(c => c.type === 'FRAME' && c.name === 'Divider')) n.remove();
+  for (const n of atomsPage.children.filter(c => c.type === 'COMPONENT' && /^Orientation=(Horizontal|Vertical), Style=(Solid|Dashed)$/.test(c.name))) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {};
+  for (const s of styles) styleByName[s.name] = s;
+  const lblStyle = styleByName['Label/Default'];
+  if (lblStyle) try { await figma.loadFontAsync(lblStyle.fontName); } catch (e) {}
+
+  const H_LEN = 320;   // horizontal divider total length
+  const V_LEN = 80;    // vertical divider total length
+  const STROKE = 1;
+  const DASH_PATTERN = [4, 4];
+
+  function makeRule(orientation, style, length) {
+    const ln = figma.createLine();
+    ln.name = 'Rule';
+    ln.strokes = [paintForVar(required['border/default'])];
+    ln.strokeWeight = STROKE;
+    if (style === 'Dashed') ln.dashPattern = DASH_PATTERN;
+    if (orientation === 'Horizontal') {
+      ln.resize(length, 0);
+    } else {
+      ln.rotation = -90;
+      ln.resize(length, 0);
+    }
+    return ln;
+  }
+
+  async function makeVariant(orientation, style) {
+    const comp = figma.createComponent();
+    comp.name = `Orientation=${orientation}, Style=${style}`;
+
+    if (orientation === 'Horizontal') {
+      // HORIZONTAL frame: [rule] [label] [rule]
+      comp.layoutMode = 'HORIZONTAL';
+      comp.primaryAxisSizingMode = 'FIXED';
+      comp.counterAxisSizingMode = 'AUTO';
+      comp.primaryAxisAlignItems = 'CENTER';
+      comp.counterAxisAlignItems = 'CENTER';
+      comp.itemSpacing = 12;
+      comp.paddingLeft = comp.paddingRight = 0;
+      comp.paddingTop = comp.paddingBottom = 0;
+      comp.fills = [];
+      comp.resize(H_LEN, 16);
+
+      const ruleA = makeRule('Horizontal', style, 100);
+      comp.appendChild(ruleA);
+      try { ruleA.layoutGrow = 1; ruleA.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+      const label = figma.createText();
+      if (lblStyle) await label.setTextStyleIdAsync(lblStyle.id);
+      label.characters = 'OR';
+      label.fills = [paintForVar(required['text/secondary'])];
+      label.name = 'Label';
+      comp.appendChild(label);
+      try { label.layoutSizingHorizontal = 'HUG'; label.layoutSizingVertical = 'HUG'; } catch (e) {}
+
+      const ruleB = makeRule('Horizontal', style, 100);
+      comp.appendChild(ruleB);
+      try { ruleB.layoutGrow = 1; ruleB.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+      return { comp, label, ruleA, ruleB };
+    } else {
+      // VERTICAL — single line, no label option
+      comp.layoutMode = 'VERTICAL';
+      comp.primaryAxisSizingMode = 'FIXED';
+      comp.counterAxisSizingMode = 'AUTO';
+      comp.primaryAxisAlignItems = 'CENTER';
+      comp.counterAxisAlignItems = 'CENTER';
+      comp.itemSpacing = 0;
+      comp.paddingLeft = comp.paddingRight = 0;
+      comp.paddingTop = comp.paddingBottom = 0;
+      comp.fills = [];
+      comp.resize(STROKE, V_LEN);
+
+      const rule = makeRule('Vertical', style, V_LEN);
+      comp.appendChild(rule);
+
+      return { comp, label: null, ruleA: rule, ruleB: null };
+    }
+  }
+
+  const allVariants = [];
+  const variantMeta = [];
+  const labelNodes = [];   // for Has Label boolean wiring (horizontal only)
+  for (const orientation of ['Horizontal', 'Vertical']) {
+    for (const style of ['Solid', 'Dashed']) {
+      const { comp, label } = await makeVariant(orientation, style);
+      allVariants.push(comp);
+      variantMeta.push({ orientation, style });
+      if (label) labelNodes.push(label);
+    }
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, atomsPage);
+  compSet.name = 'Divider';
+  compSet.layoutMode = 'NONE';
+  compSet.fills = [];
+
+  // Has Label boolean — applies only to horizontal variants. We toggle the label
+  // visibility on horizontal variants; vertical variants have no label so the
+  // boolean is harmless there.
+  let labelPropId = null;
+  try { labelPropId = compSet.addComponentProperty('Has Label', 'BOOLEAN', true); } catch (e) {}
+  if (labelPropId) {
+    for (const t of labelNodes) {
+      try { t.componentPropertyReferences = { visible: labelPropId }; } catch (e) {}
+    }
+  }
+
+  // Layout — 2 cols (Solid/Dashed) × 2 rows (Horizontal/Vertical)
+  const PAD_LEFT = 220, PAD_TOP = 140, PAD_RIGHT = 56, PAD_BOT = 56;
+  const COL_W = 360, ROW_H = 100, COL_GAP = 32, ROW_GAP = 32;
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i];
+    const m = variantMeta[i];
+    const colIdx = m.style === 'Solid' ? 0 : 1;
+    const rowIdx = m.orientation === 'Horizontal' ? 0 : 1;
+    v.x = Math.round(PAD_LEFT + colIdx * (COL_W + COL_GAP));
+    v.y = Math.round(PAD_TOP + rowIdx * (ROW_H + ROW_GAP) + (ROW_H - v.height) / 2);
+  }
+  compSet.resize(
+    PAD_LEFT + COL_W * 2 + COL_GAP + PAD_RIGHT,
+    PAD_TOP + ROW_H * 2 + ROW_GAP + PAD_BOT
+  );
+
+  // Position below all existing components
+  let maxBottom = 0;
+  for (const node of atomsPage.children) {
+    if (node === compSet) continue;
+    if (node.type !== 'COMPONENT_SET' && node.type !== 'COMPONENT' && node.type !== 'FRAME') continue;
+    if ('y' in node && 'height' in node) { const b = node.y + node.height; if (b > maxBottom) maxBottom = b; }
+  }
+  compSet.x = 0;
+  compSet.y = maxBottom > 0 ? Math.round(maxBottom + 120) : 0;
+
+  const colGroups = [{
+    name: 'Style', x: PAD_LEFT, width: COL_W * 2 + COL_GAP,
+    sizes: [
+      { name: 'Solid',  x: PAD_LEFT,                     width: COL_W },
+      { name: 'Dashed', x: PAD_LEFT + COL_W + COL_GAP,   width: COL_W },
+    ],
+  }];
+  const rowGroups = [{
+    name: 'Orientation', y: PAD_TOP,
+    states: [
+      { name: 'Horizontal', y: PAD_TOP,                          height: ROW_H },
+      { name: 'Vertical',   y: PAD_TOP + ROW_H + ROW_GAP,        height: ROW_H },
+    ],
+  }];
+  await decorateComponentSet({
+    page: atomsPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'],
+    sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'],
+    labelSecondaryVar: required['text/secondary'],
+    componentName: 'Divider',
+    surfaceVar: required['surface/card'],
+    borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Divider built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
+// SPINNER — loading indicator
+//   Size:  XS(12) | Small(16) | Default(20) | Large(24) | XL(32)
+//   Color: Brand | Neutral | On-Brand (white spinner for use on brand bg)
+//   Booleans: Has Label (inline label after spinner)
+//   Implementation: 360° arc as a circle with a stroke gap (using stroke +
+//   square cornered ellipse + transparent gap arc) — simplest cross-version
+//   approach is an ellipse with stroke and a top "notch" achieved by a small
+//   white-colored arc cap. We use a stroked ellipse with `strokeAlign='CENTER'`,
+//   then a smaller filled arc on top is impractical without vector math.
+//   Instead: ring = stroked ellipse + a single colored vector arc covering 75%.
+// =============================================================================
+const SPINNER_SIZE_SPECS = {
+  XS:      { d: 12, weight: 1.5, font: 'Body/Small',   labelGap: 6 },
+  Small:   { d: 16, weight: 2,   font: 'Body/Small',   labelGap: 8 },
+  Default: { d: 20, weight: 2,   font: 'Body/Default', labelGap: 8 },
+  Large:   { d: 24, weight: 2.5, font: 'Body/Default', labelGap: 10 },
+  XL:      { d: 32, weight: 3,   font: 'Body/Default', labelGap: 12 },
+};
+
+async function buildSpinner() {
+  console.log('[OM DS] buildSpinner started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  // Need brand/on-primary too
+  const allColorVars = await figma.variables.getLocalVariablesAsync('COLOR');
+  const collections = await figma.variables.getLocalVariableCollectionsAsync();
+  const themeCol = collections.find(c => c.name === '_Theme');
+  const onPrimary = themeCol && allColorVars.find(v => v.variableCollectionId === themeCol.id && v.name === 'brand/on-primary');
+
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || figma.currentPage;
+  await figma.setCurrentPageAsync(atomsPage);
+
+  // Idempotency
+  const _existSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Spinner');
+  if (_existSet) _existSet.remove();
+  for (const n of atomsPage.children.filter(c => c.type === 'FRAME' && c.name === 'Spinner')) n.remove();
+  for (const n of atomsPage.children.filter(c => c.type === 'COMPONENT' && /^Size=(XS|Small|Medium|Default|Large|XL), Color=(Brand|Neutral|On-Brand)$/.test(c.name))) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {};
+  for (const s of styles) styleByName[s.name] = s;
+  const fontsToLoad = new Set();
+  for (const k of Object.keys(SPINNER_SIZE_SPECS)) {
+    const st = styleByName[SPINNER_SIZE_SPECS[k].font];
+    if (st) fontsToLoad.add(JSON.stringify(st.fontName));
+  }
+  for (const f of fontsToLoad) await figma.loadFontAsync(JSON.parse(f));
+
+  function colorVarFor(color) {
+    if (color === 'Brand')    return required['brand/primary'];
+    if (color === 'On-Brand') return onPrimary || required['surface/card'];
+    return required['icon/default'];                 // Neutral
+  }
+  function trackVarFor(color) {
+    // Light "track" ring behind the moving arc
+    if (color === 'On-Brand') return required['brand/primary-muted'] || required['state/disabled-bg'];
+    return required['state/disabled-bg'];
+  }
+
+  // Build a spinner ring as: ellipse (track full circle) + arc 270° (active part)
+  // Using two ellipses stacked: full circle = track, then a 3/4 arc layered on top.
+  function makeRing(d, weight, activeVar, trackVar) {
+    const wrap = figma.createFrame();
+    wrap.name = 'Ring';
+    wrap.layoutMode = 'NONE';
+    wrap.fills = [];
+    wrap.clipsContent = false;
+    wrap.resize(d, d);
+
+    // Track (full ring)
+    const track = figma.createEllipse();
+    track.name = 'Track';
+    track.resize(d, d);
+    track.fills = [];
+    track.strokes = [paintForVar(trackVar)];
+    track.strokeWeight = weight;
+    track.strokeAlign = 'INSIDE';
+    wrap.appendChild(track);
+
+    // Active arc — use ellipse arcData to draw 270°
+    const arc = figma.createEllipse();
+    arc.name = 'Arc';
+    arc.resize(d, d);
+    arc.fills = [];
+    arc.strokes = [paintForVar(activeVar)];
+    arc.strokeWeight = weight;
+    arc.strokeAlign = 'INSIDE';
+    arc.arcData = { startingAngle: 0, endingAngle: Math.PI * 1.5, innerRadius: 0 };
+    arc.rotation = -90; // start at top
+    wrap.appendChild(arc);
+
+    return wrap;
+  }
+
+  async function makeVariant(size, color) {
+    const spec = SPINNER_SIZE_SPECS[size];
+    const comp = figma.createComponent();
+    comp.name = `Size=${size}, Color=${color}`;
+    comp.layoutMode = 'HORIZONTAL';
+    comp.primaryAxisSizingMode = 'AUTO';
+    comp.counterAxisSizingMode = 'AUTO';
+    comp.primaryAxisAlignItems = 'CENTER';
+    comp.counterAxisAlignItems = 'CENTER';
+    comp.itemSpacing = spec.labelGap;
+    comp.paddingLeft = comp.paddingRight = 0;
+    comp.paddingTop = comp.paddingBottom = 0;
+    comp.fills = [];
+
+    const ring = makeRing(spec.d, spec.weight, colorVarFor(color), trackVarFor(color));
+    comp.appendChild(ring);
+    try { ring.layoutSizingHorizontal = 'FIXED'; ring.layoutSizingVertical = 'FIXED'; } catch (e) {}
+
+    const label = figma.createText();
+    const fStyle = styleByName[spec.font];
+    if (fStyle) await label.setTextStyleIdAsync(fStyle.id);
+    label.characters = 'Loading…';
+    label.fills = [paintForVar(color === 'On-Brand' ? (onPrimary || required['surface/card']) : required['text/secondary'])];
+    label.name = 'Label';
+    comp.appendChild(label);
+    try { label.layoutSizingHorizontal = 'HUG'; label.layoutSizingVertical = 'HUG'; } catch (e) {}
+
+    return { comp, label };
+  }
+
+  const SIZES  = ['XS', 'Small', 'Default', 'Large', 'XL'];
+  const COLORS = ['Brand', 'Neutral', 'On-Brand'];
+
+  const allVariants = [];
+  const variantMeta = [];
+  const labelNodes = [];
+  for (const size of SIZES) {
+    for (const color of COLORS) {
+      const { comp, label } = await makeVariant(size, color);
+      allVariants.push(comp);
+      variantMeta.push({ size, color });
+      labelNodes.push(label);
+    }
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, atomsPage);
+  compSet.name = 'Spinner';
+  compSet.layoutMode = 'NONE';
+  compSet.fills = [];
+
+  let labelPropId = null;
+  try { labelPropId = compSet.addComponentProperty('Has Label', 'BOOLEAN', false); } catch (e) {}
+  if (labelPropId) {
+    for (const t of labelNodes) {
+      try { t.componentPropertyReferences = { visible: labelPropId }; } catch (e) {}
+    }
+  }
+
+  // Layout: 3 cols (Brand/Neutral/On-Brand) × 5 rows (sizes)
+  // On-Brand col gets a brand-muted backdrop so the white spinner is visible.
+  const PAD_LEFT = 220, PAD_TOP = 140, PAD_RIGHT = 56, PAD_BOT = 56;
+  const COL_W = 220, ROW_H = 56, COL_GAP = 32, ROW_GAP = 24;
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i];
+    const m = variantMeta[i];
+    const colIdx = COLORS.indexOf(m.color);
+    const rowIdx = SIZES.indexOf(m.size);
+    v.x = Math.round(PAD_LEFT + colIdx * (COL_W + COL_GAP) + (COL_W - v.width) / 2);
+    v.y = Math.round(PAD_TOP + rowIdx * (ROW_H + ROW_GAP) + (ROW_H - v.height) / 2);
+  }
+  compSet.resize(
+    PAD_LEFT + COL_W * COLORS.length + COL_GAP * (COLORS.length - 1) + PAD_RIGHT,
+    PAD_TOP + ROW_H * SIZES.length + ROW_GAP * (SIZES.length - 1) + PAD_BOT
+  );
+
+  let maxBottom = 0;
+  for (const node of atomsPage.children) {
+    if (node === compSet) continue;
+    if (node.type !== 'COMPONENT_SET' && node.type !== 'COMPONENT' && node.type !== 'FRAME') continue;
+    if ('y' in node && 'height' in node) { const b = node.y + node.height; if (b > maxBottom) maxBottom = b; }
+  }
+  compSet.x = 0;
+  compSet.y = maxBottom > 0 ? Math.round(maxBottom + 120) : 0;
+
+  const colGroups = [{
+    name: 'Color', x: PAD_LEFT, width: COL_W * COLORS.length + COL_GAP * (COLORS.length - 1),
+    sizes: COLORS.map((c, i) => ({ name: c, x: PAD_LEFT + i * (COL_W + COL_GAP), width: COL_W })),
+  }];
+  const rowGroups = [{
+    name: 'Size', y: PAD_TOP,
+    states: SIZES.map((s, i) => ({ name: s, y: PAD_TOP + i * (ROW_H + ROW_GAP), height: ROW_H })),
+  }];
+  await decorateComponentSet({
+    page: atomsPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'],
+    sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'],
+    labelSecondaryVar: required['text/secondary'],
+    componentName: 'Spinner',
+    surfaceVar: required['surface/card'],
+    borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Spinner built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
 // DROPDOWN — Single + Multi-Chips + Multi-Inline merged
 //   Type: Single | Multi-Chips | Multi-Inline
 //   Size: Small | Default | Large
@@ -6547,6 +6980,10 @@ async function rebuildAll() {
       await buildTextarea();
     } else if (figma.command === 'buildDropdown') {
       await buildDropdown();
+    } else if (figma.command === 'buildDivider') {
+      await buildDivider();
+    } else if (figma.command === 'buildSpinner') {
+      await buildSpinner();
     } else if (figma.command === 'buildIconButton') {
       await buildIconButton();
     } else if (figma.command === 'buildSplitButton') {

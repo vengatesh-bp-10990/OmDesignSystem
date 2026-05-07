@@ -10350,6 +10350,245 @@ async function buildRangePicker() {
 
 
 // =============================================================================
+// TIME PICKER (molecule) — TextField trigger + 3-column scroll popover
+//   Size:  Small | Medium | Default
+//   State: Default | Open | Disabled
+//   Has Value: false (placeholder) | true ("10:30 AM")
+// Open popover = three columns (Hour · Minute · Period). Each column is a
+// vertical stack of rows; the centered row is "Selected" (brand pill).
+// =============================================================================
+async function buildTimePicker() {
+  console.log('[OM DS] buildTimePicker started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules')) || figma.currentPage;
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || moleculesPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Time Picker');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Time Picker')) n.remove();
+
+  const tfSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'TextField');
+  if (!tfSet) { figma.notify('⚠️ TextField not found. Run "Build TextField" first.'); return; }
+
+  function findTfVariant(size, fieldState, content) {
+    return tfSet.children.find(c => c.name === `Size=${size}, State=${fieldState}, Status=None, Content=${content}`)
+        || tfSet.children.find(c => c.name === `Size=${size}, State=Default, Status=None, Content=${content}`);
+  }
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const clockIc = await findIconComp(iconsPage, ['clock', 'time', 'watch']);
+
+  async function setFieldText(inst, value) {
+    const field = inst.findOne(n => n.type === 'FRAME' && n.name === 'Field');
+    const t = field && field.findOne(n => n.type === 'TEXT');
+    if (!t) return;
+    try { await figma.loadFontAsync(t.fontName); } catch (e) {}
+    try { t.characters = value; } catch (e) {}
+  }
+  async function setLabelText(inst, value) {
+    const labelInst = inst.findOne(n => n.type === 'INSTANCE' && /Label/i.test(n.name));
+    const target = labelInst || inst;
+    const t = target.findOne(n => n.type === 'TEXT' && /label/i.test(n.name));
+    if (!t) return;
+    try { await figma.loadFontAsync(t.fontName); } catch (e) {}
+    try { t.characters = value; } catch (e) {}
+  }
+  async function bindSuffixIcon(tfInst) {
+    try {
+      const props = tfInst.componentProperties;
+      const suffixKey = Object.keys(props || {}).find(k => /Has Suffix Icon/i.test(k));
+      if (suffixKey) tfInst.setProperties({ [suffixKey]: true });
+    } catch (e) {}
+    if (!clockIc) return;
+    try {
+      const field = tfInst.findOne(n => n.type === 'FRAME' && n.name === 'Field');
+      if (!field) return;
+      const iconInsts = field.children.filter(c => c.type === 'INSTANCE');
+      const suffix = iconInsts[iconInsts.length - 1];
+      if (suffix) suffix.swapComponent(clockIc);
+    } catch (e) {}
+  }
+
+  // ---- Time popover (built inline; not a separate component set) ------------
+  // Each column shows 5 rows centered on the selected value.
+  const COL_W = 64, ROW_H = 32;
+
+  async function makeRow(text, isSelected, isMuted) {
+    const row = figma.createFrame();
+    row.layoutMode = 'HORIZONTAL';
+    row.primaryAxisSizingMode = 'FIXED';
+    row.counterAxisSizingMode = 'FIXED';
+    row.primaryAxisAlignItems = 'CENTER';
+    row.counterAxisAlignItems = 'CENTER';
+    row.resize(COL_W, ROW_H);
+    row.cornerRadius = 6;
+    if (isSelected) {
+      row.fills = [paintForVar(required['brand/primary-subtle'] || required['brand/primary-muted'])];
+    } else {
+      row.fills = [];
+    }
+    const t = figma.createText();
+    const fStyle = styleByName['Body/Default'];
+    if (fStyle) await t.setTextStyleIdAsync(fStyle.id);
+    t.characters = text;
+    const colorVar = isSelected
+      ? required['brand/primary']
+      : (isMuted ? required['text/tertiary'] : required['text/secondary']);
+    t.fills = [paintForVar(colorVar)];
+    t.textAutoResize = 'WIDTH_AND_HEIGHT';
+    row.appendChild(t);
+    return row;
+  }
+
+  async function makeColumn(values, selectedIndex) {
+    const col = figma.createFrame();
+    col.layoutMode = 'VERTICAL';
+    col.primaryAxisSizingMode = 'AUTO';
+    col.counterAxisSizingMode = 'AUTO';
+    col.itemSpacing = 2;
+    col.fills = [];
+    for (let i = 0; i < values.length; i++) {
+      const isSel = i === selectedIndex;
+      const isMuted = Math.abs(i - selectedIndex) >= 2;
+      col.appendChild(await makeRow(values[i], isSel, isMuted));
+    }
+    return col;
+  }
+
+  async function makeTimePopover() {
+    const pop = figma.createFrame();
+    pop.name = 'Popover';
+    pop.layoutMode = 'HORIZONTAL';
+    pop.primaryAxisSizingMode = 'AUTO';
+    pop.counterAxisSizingMode = 'AUTO';
+    pop.counterAxisAlignItems = 'CENTER';
+    pop.itemSpacing = 8;
+    pop.paddingLeft = pop.paddingRight = 16;
+    pop.paddingTop = pop.paddingBottom = 16;
+    pop.fills = [paintForVar(required['surface/card'])];
+    pop.strokes = [paintForVar(required['border/default'])];
+    pop.strokeWeight = 1;
+    pop.strokeAlign = 'INSIDE';
+    pop.cornerRadius = 12;
+    try {
+      pop.effects = [{
+        type: 'DROP_SHADOW',
+        color: { r: 0.06, g: 0.07, b: 0.12, a: 0.08 },
+        offset: { x: 0, y: 8 },
+        radius: 24,
+        spread: -4,
+        visible: true,
+        blendMode: 'NORMAL',
+      }];
+    } catch (e) {}
+
+    // Hour: 8, 9, [10], 11, 12   (selected = 10)
+    const hours   = ['08', '09', '10', '11', '12'];
+    // Minute: :00, :15, [:30], :45, :00   (selected = :30)
+    const minutes = ['00', '15', '30', '45', '00'];
+    // Period: AM, AM, [AM], PM, PM (selected = AM)
+    const periods = ['AM', 'AM', 'AM', 'PM', 'PM'];
+
+    pop.appendChild(await makeColumn(hours, 2));
+    pop.appendChild(await makeColumn(minutes, 2));
+    pop.appendChild(await makeColumn(periods, 2));
+    return pop;
+  }
+
+  async function makeVariant(size, state, hasValue) {
+    const wrap = figma.createComponent();
+    wrap.name = `Size=${size}, State=${state}, Has Value=${hasValue}`;
+    wrap.layoutMode = 'VERTICAL';
+    wrap.primaryAxisSizingMode = 'AUTO';
+    wrap.counterAxisSizingMode = 'AUTO';
+    wrap.itemSpacing = 8;
+    wrap.fills = [];
+
+    const fieldState = state === 'Open' ? 'Active' : (state === 'Disabled' ? 'Disabled' : 'Default');
+    const content = hasValue ? 'Filled' : 'Empty';
+    const tfVariant = findTfVariant(size, fieldState, content);
+    if (!tfVariant) return wrap;
+
+    const tfInst = tfVariant.createInstance();
+    tfInst.name = 'Trigger';
+    wrap.appendChild(tfInst);
+    await setLabelText(tfInst, 'Time');
+    await setFieldText(tfInst, hasValue ? '10:30 AM' : 'Select time');
+    await bindSuffixIcon(tfInst);
+
+    if (state === 'Open') {
+      const pop = await makeTimePopover();
+      wrap.appendChild(pop);
+    }
+    return wrap;
+  }
+
+  const SIZES = ['Small', 'Medium', 'Default'];
+  const STATES = ['Default', 'Open', 'Disabled'];
+  const HASVAL = [false, true];
+  const allVariants = []; const meta = [];
+  for (const sz of SIZES) for (const st of STATES) for (const hv of HASVAL) {
+    const v = await makeVariant(sz, st, hv);
+    allVariants.push(v); meta.push({ size: sz, state: st, hv });
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Time Picker'; compSet.layoutMode = 'NONE'; compSet.fills = [];
+
+  const PAD_LEFT = 240, PAD_TOP = 200, PAD_RIGHT = 80, PAD_BOT = 80;
+  const COL_LAYOUT_W = 380;
+  const ROW_GAP = 60;
+
+  const cols = [];
+  let cIdx = 0;
+  for (const st of STATES) for (const hv of HASVAL) {
+    cols.push({ state: st, hv, x: PAD_LEFT + cIdx * COL_LAYOUT_W, w: COL_LAYOUT_W, name: `${st}${hv ? ' • Filled' : ''}` });
+    cIdx++;
+  }
+  const rowHeights = SIZES.map(sz => {
+    const variantsInRow = allVariants.filter((v, i) => meta[i].size === sz);
+    return Math.max(...variantsInRow.map(v => v.height));
+  });
+  const rowYs = []; let cy = PAD_TOP;
+  for (let i = 0; i < SIZES.length; i++) { rowYs.push(cy); cy += rowHeights[i] + ROW_GAP; }
+
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i]; const m = meta[i];
+    const col = cols.find(c => c.state === m.state && c.hv === m.hv);
+    const rowIdx = SIZES.indexOf(m.size);
+    if (!col) continue;
+    v.x = Math.round(col.x + (col.w - v.width) / 2);
+    v.y = Math.round(rowYs[rowIdx] + (rowHeights[rowIdx] - v.height) / 2);
+  }
+  compSet.resize(PAD_LEFT + cols.length * COL_LAYOUT_W + PAD_RIGHT, cy + PAD_BOT);
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  const colGroups = [{ name: 'State × Has Value', x: PAD_LEFT, width: cols.length * COL_LAYOUT_W,
+    sizes: cols.map(c => ({ name: c.name, x: c.x, width: c.w })) }];
+  const rowGroups = SIZES.map((sz, i) => ({ name: sz, y: rowYs[i],
+    states: [{ name: '', y: rowYs[i], height: rowHeights[i] }] }));
+
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Time Picker', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Time Picker built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
 // DROPDOWN — Single + Multi-Chips + Multi-Inline merged
 //   Type: Single | Multi-Chips | Multi-Inline
 //   Size: Small | Default | Large
@@ -10781,6 +11020,8 @@ async function rebuildAll() {
       await buildDatePicker();
     } else if (figma.command === 'buildRangePicker') {
       await buildRangePicker();
+    } else if (figma.command === 'buildTimePicker') {
+      await buildTimePicker();
     } else if (figma.command === 'cleanupFallbackIcons') {
       await cleanupFallbackIcons();
     } else {

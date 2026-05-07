@@ -11400,6 +11400,7 @@ async function buildStepper() {
         cell.counterAxisAlignItems = 'MIN';
         cell.fills = [];
         cell.resize(cellW, 1);
+        cell.counterAxisSizingMode = 'AUTO';
         cell.paddingTop = 0;
         // Center label text under its circle: pad-left so label center ~ circle center.
         // Approximation: subtract roughly half label width is impossible without measuring;
@@ -11421,6 +11422,7 @@ async function buildStepper() {
       col1.itemSpacing = 0;
       col1.fills = [];
       col1.resize(sizePx, 1);
+      col1.primaryAxisSizingMode = 'AUTO';
       wrap.appendChild(col1);
 
       const col2 = figma.createFrame();
@@ -11448,6 +11450,7 @@ async function buildStepper() {
         cell.counterAxisAlignItems = 'MIN';
         cell.fills = [];
         cell.resize(1, cellH);
+        cell.primaryAxisSizingMode = 'AUTO';
         // Top-pad so label baseline aligns with circle center
         cell.paddingTop = Math.round((sizePx - 16) / 2);
         col2.appendChild(cell);

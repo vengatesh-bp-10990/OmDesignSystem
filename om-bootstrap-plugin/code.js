@@ -6513,15 +6513,20 @@ async function buildSpinner() {
     wrap.appendChild(track);
 
     // Active arc — donut sector (filled): outer radius = d/2, inner radius = d/2 - weight.
-    // innerRadius is normalized 0..1.
+    // innerRadius is normalized 0..1. Set angles so arc starts at top and sweeps 270°
+    // clockwise to the left — avoids needing rotation (rotation in Figma is around
+    // top-left and would shift the bounding box off the track).
     const inner = Math.max(0, (d / 2 - weight) / (d / 2));
     const arc = figma.createEllipse();
     arc.name = 'Arc';
     arc.resize(d, d);
     arc.strokes = [];
     arc.fills = [paintForVar(activeVar)];
-    arc.arcData = { startingAngle: 0, endingAngle: Math.PI * 1.5, innerRadius: inner };
-    arc.rotation = -90; // start at top, sweep clockwise
+    arc.arcData = {
+      startingAngle: -Math.PI / 2,           // top (12 o'clock)
+      endingAngle:    Math.PI,               // left (9 o'clock) — sweep 270°
+      innerRadius: inner,
+    };
     wrap.appendChild(arc);
 
     return wrap;

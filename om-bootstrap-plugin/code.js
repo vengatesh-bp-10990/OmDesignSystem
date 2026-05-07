@@ -9674,20 +9674,20 @@ async function buildCalendar() {
   const chevR = await findIconComp(iconsPage, ['chevron-right', 'arrow-right', 'caret-right']);
 
   // ---------- 1. Day Cell component set --------------------------------------
-  const CELL_W = 36, CELL_H = 32;
+  const CELL_W = 40, CELL_H = 40;
   const DAY_STATES = ['Default', 'Hover', 'Today', 'Selected', 'In-Range', 'Range-Start', 'Range-End', 'Disabled', 'Outside-Month'];
 
   function dayPalette(state) {
     switch (state) {
-      case 'Default':       return { bg: null,                         text: required['text/primary'],   radius: 6,   border: null };
-      case 'Hover':         return { bg: required['state/disabled-bg'], text: required['text/primary'],   radius: 6,   border: null };
-      case 'Today':         return { bg: null,                         text: required['brand/primary'],  radius: 6,   border: required['brand/primary'] };
-      case 'Selected':      return { bg: required['brand/primary'],     text: required['brand/on-primary'] || required['surface/card'], radius: 6, border: null };
+      case 'Default':       return { bg: null,                         text: required['text/primary'],   radius: 8,   border: null };
+      case 'Hover':         return { bg: required['state/disabled-bg'], text: required['text/primary'],   radius: 8,   border: null };
+      case 'Today':         return { bg: null,                         text: required['brand/primary'],  radius: 8,   border: required['brand/primary'] };
+      case 'Selected':      return { bg: required['brand/primary'],     text: required['brand/on-primary'] || required['surface/card'], radius: 8, border: null };
       case 'In-Range':      return { bg: required['brand/primary-subtle'] || required['brand/primary-muted'], text: required['brand/primary'], radius: 0, border: null };
-      case 'Range-Start':   return { bg: required['brand/primary'],     text: required['brand/on-primary'] || required['surface/card'], radius: 6, border: null, halfRight: true };
-      case 'Range-End':     return { bg: required['brand/primary'],     text: required['brand/on-primary'] || required['surface/card'], radius: 6, border: null, halfLeft: true };
-      case 'Disabled':      return { bg: null,                         text: required['state/disabled-text'], radius: 6, border: null };
-      case 'Outside-Month': return { bg: null,                         text: required['text/tertiary'],  radius: 6,   border: null };
+      case 'Range-Start':   return { bg: required['brand/primary'],     text: required['brand/on-primary'] || required['surface/card'], radius: 8, border: null, halfRight: true };
+      case 'Range-End':     return { bg: required['brand/primary'],     text: required['brand/on-primary'] || required['surface/card'], radius: 8, border: null, halfLeft: true };
+      case 'Disabled':      return { bg: null,                         text: required['state/disabled-text'], radius: 8, border: null };
+      case 'Outside-Month': return { bg: null,                         text: required['text/tertiary'],  radius: 8,   border: null };
     }
   }
 
@@ -9788,14 +9788,26 @@ async function buildCalendar() {
     wrap.layoutMode = 'VERTICAL';
     wrap.primaryAxisSizingMode = 'AUTO';
     wrap.counterAxisSizingMode = 'AUTO';
-    wrap.itemSpacing = 4;
-    wrap.paddingLeft = wrap.paddingRight = 12;
-    wrap.paddingTop = wrap.paddingBottom = 12;
+    wrap.itemSpacing = 12;
+    wrap.paddingLeft = wrap.paddingRight = 20;
+    wrap.paddingTop = wrap.paddingBottom = 20;
     wrap.fills = [paintForVar(required['surface/card'])];
     wrap.strokes = [paintForVar(required['border/default'])];
     wrap.strokeWeight = 1;
     wrap.strokeAlign = 'INSIDE';
-    wrap.cornerRadius = 8;
+    wrap.cornerRadius = 12;
+    // Soft elevation so the popover feels like a real menu
+    try {
+      wrap.effects = [{
+        type: 'DROP_SHADOW',
+        color: { r: 0.06, g: 0.07, b: 0.12, a: 0.08 },
+        offset: { x: 0, y: 8 },
+        radius: 24,
+        spread: -4,
+        visible: true,
+        blendMode: 'NORMAL',
+      }];
+    } catch (e) {}
 
     // Header
     const header = figma.createFrame();
@@ -9811,24 +9823,48 @@ async function buildCalendar() {
     header.paddingTop = header.paddingBottom = 4;
     wrap.appendChild(header);
 
+    // Prev nav button (icon in a soft hit-target)
+    const prevBtn = figma.createFrame();
+    prevBtn.name = 'Prev';
+    prevBtn.layoutMode = 'HORIZONTAL';
+    prevBtn.primaryAxisSizingMode = 'FIXED';
+    prevBtn.counterAxisSizingMode = 'FIXED';
+    prevBtn.primaryAxisAlignItems = 'CENTER';
+    prevBtn.counterAxisAlignItems = 'CENTER';
+    prevBtn.resize(28, 28);
+    prevBtn.cornerRadius = 6;
+    prevBtn.fills = [];
+    header.appendChild(prevBtn);
     if (chevL) {
-      const l = chevL.createInstance(); l.name = 'Prev';
+      const l = chevL.createInstance(); l.name = 'Icon';
       resizeIconInstance(l, 16); bindIconColorForm(l, required['icon/default']);
-      header.appendChild(l);
+      prevBtn.appendChild(l);
       try { l.layoutSizingHorizontal = 'FIXED'; l.layoutSizingVertical = 'FIXED'; } catch (e) {}
     }
+
     const monthText = figma.createText();
-    const hStyle = styleByName['Label/Default'] || styleByName['Body/Default'];
+    const hStyle = styleByName['Heading/H6'] || styleByName['Label/Default'] || styleByName['Body/Default'];
     if (hStyle) await monthText.setTextStyleIdAsync(hStyle.id);
     monthText.characters = 'May 2026';
     monthText.fills = [paintForVar(required['text/primary'])];
     monthText.textAutoResize = 'WIDTH_AND_HEIGHT';
     header.appendChild(monthText);
 
+    const nextBtn = figma.createFrame();
+    nextBtn.name = 'Next';
+    nextBtn.layoutMode = 'HORIZONTAL';
+    nextBtn.primaryAxisSizingMode = 'FIXED';
+    nextBtn.counterAxisSizingMode = 'FIXED';
+    nextBtn.primaryAxisAlignItems = 'CENTER';
+    nextBtn.counterAxisAlignItems = 'CENTER';
+    nextBtn.resize(28, 28);
+    nextBtn.cornerRadius = 6;
+    nextBtn.fills = [];
+    header.appendChild(nextBtn);
     if (chevR) {
-      const r = chevR.createInstance(); r.name = 'Next';
+      const r = chevR.createInstance(); r.name = 'Icon';
       resizeIconInstance(r, 16); bindIconColorForm(r, required['icon/default']);
-      header.appendChild(r);
+      nextBtn.appendChild(r);
       try { r.layoutSizingHorizontal = 'FIXED'; r.layoutSizingVertical = 'FIXED'; } catch (e) {}
     }
     try { header.layoutSizingHorizontal = 'FILL'; } catch (e) {}
@@ -9839,7 +9875,8 @@ async function buildCalendar() {
     wkRow.layoutMode = 'HORIZONTAL';
     wkRow.primaryAxisSizingMode = 'AUTO';
     wkRow.counterAxisSizingMode = 'AUTO';
-    wkRow.itemSpacing = 0;
+    wkRow.itemSpacing = 4;
+    wkRow.paddingBottom = 4;
     wkRow.fills = [];
     wrap.appendChild(wkRow);
     for (const w of WEEKDAYS) {
@@ -9850,12 +9887,12 @@ async function buildCalendar() {
       cell.primaryAxisAlignItems = 'CENTER';
       cell.counterAxisAlignItems = 'CENTER';
       cell.fills = [];
-      cell.resize(CELL_W, 24);
+      cell.resize(CELL_W, 28);
       const t = figma.createText();
       const sStyle = styleByName['Label/Default'] || styleByName['Body/Small'];
       if (sStyle) await t.setTextStyleIdAsync(sStyle.id);
       t.characters = w;
-      t.fills = [paintForVar(required['text/secondary'])];
+      t.fills = [paintForVar(required['text/tertiary'])];
       t.textAutoResize = 'WIDTH_AND_HEIGHT';
       cell.appendChild(t);
       wkRow.appendChild(cell);
@@ -9867,7 +9904,7 @@ async function buildCalendar() {
     grid.layoutMode = 'VERTICAL';
     grid.primaryAxisSizingMode = 'AUTO';
     grid.counterAxisSizingMode = 'AUTO';
-    grid.itemSpacing = 2;
+    grid.itemSpacing = 4;
     grid.fills = [];
     wrap.appendChild(grid);
 
@@ -9876,7 +9913,7 @@ async function buildCalendar() {
       row.layoutMode = 'HORIZONTAL';
       row.primaryAxisSizingMode = 'AUTO';
       row.counterAxisSizingMode = 'AUTO';
-      row.itemSpacing = 0;
+      row.itemSpacing = 4;
       row.fills = [];
       grid.appendChild(row);
       for (const cellDef of week) {
@@ -9898,8 +9935,8 @@ async function buildCalendar() {
   calSet.name = 'Calendar'; calSet.layoutMode = 'NONE'; calSet.fills = [];
 
   // Lay out Calendar variants in a row with section labels
-  const PAD_LEFT = 220, PAD_TOP = 160, PAD_RIGHT = 56, PAD_BOT = 56;
-  const COL_W = 320;
+  const PAD_LEFT = 220, PAD_TOP = 180, PAD_RIGHT = 80, PAD_BOT = 80;
+  const COL_W = 400;
   for (let i = 0; i < calVariants.length; i++) {
     const v = calVariants[i];
     v.x = Math.round(PAD_LEFT + i * COL_W + (COL_W - v.width) / 2);

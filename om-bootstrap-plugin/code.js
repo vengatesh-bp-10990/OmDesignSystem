@@ -10015,11 +10015,16 @@ async function buildDatePicker() {
   const calendarIc = await findIconComp(iconsPage, ['calendar', 'calendar-days', 'event']);
 
   async function setFieldText(inst, value, hasValue) {
-    // Find the input text node inside the TextField instance and set placeholder/value
-    const t = inst.findOne(n => n.type === 'TEXT' && (n.name === 'Input' || n.name === 'Value' || n.name === 'Placeholder'));
+    // The TextField's `Field` frame contains exactly one TEXT child (the input).
+    const field = inst.findOne(n => n.type === 'FRAME' && n.name === 'Field');
+    const t = field && field.findOne(n => n.type === 'TEXT');
     if (!t) return;
     try { await figma.loadFontAsync(t.fontName); } catch (e) {}
     try { t.characters = value; } catch (e) {}
+    // Use placeholder color for Empty, primary text for Filled
+    try {
+      t.fills = [paintForVar(hasValue ? required['text/primary'] : required['text/tertiary'])];
+    } catch (e) {}
   }
 
   async function setLabelText(inst, value) {
@@ -10034,19 +10039,22 @@ async function buildDatePicker() {
   }
 
   async function bindSuffixIcon(tfInst) {
-    // The TextField has a "Has Suffix Icon" boolean. Toggle it via the instance's
-    // component property and then swap the icon glyph if possible.
+    // Toggle the boolean prop so the suffix icon is shown
     try {
       const props = tfInst.componentProperties;
       const suffixKey = Object.keys(props || {}).find(k => /Has Suffix Icon/i.test(k));
       if (suffixKey) tfInst.setProperties({ [suffixKey]: true });
     } catch (e) {}
-    // Swap the visible suffix icon to a calendar glyph (best-effort).
     if (!calendarIc) return;
+    // The Field frame holds: [prefixIcon, inputText, clearIcon, suffixIcon].
+    // The suffix is the LAST INSTANCE child of Field (icons are unnamed).
     try {
-      const suffixHolder = tfInst.findOne(n => n.type === 'INSTANCE' && /suffix/i.test(n.name));
-      if (suffixHolder) suffixHolder.swapComponent(calendarIc);
-    } catch (e) {}
+      const field = tfInst.findOne(n => n.type === 'FRAME' && n.name === 'Field');
+      if (!field) return;
+      const iconInsts = field.children.filter(c => c.type === 'INSTANCE');
+      const suffix = iconInsts[iconInsts.length - 1];
+      if (suffix) suffix.swapComponent(calendarIc);
+    } catch (e) { console.warn('[OM DS] DatePicker: suffix swap failed', e); }
   }
 
   async function makeVariant(size, state, hasValue) {

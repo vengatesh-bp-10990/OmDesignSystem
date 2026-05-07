@@ -6490,9 +6490,10 @@ async function buildSpinner() {
     return required['state/disabled-bg'];
   }
 
-  // Build a spinner ring as: ellipse (track full circle) + open arc 270° vector (active part).
-  // Vector path is an SVG arc with NO fill — avoids the pie/pacman radial edges that
-  // ellipse arcData creates.
+  // Build a spinner ring as: ellipse track (full circle, stroked) + ellipse 270° arc
+  // drawn as a FILLED donut sector via arcData + innerRadius. This avoids both the
+  // pacman-pie problem (radial edges) and the SVG-A path issue (Figma vectorPaths
+  // don't support the A arc command).
   function makeRing(d, weight, activeVar, trackVar) {
     const wrap = figma.createFrame();
     wrap.name = 'Ring';
@@ -6501,7 +6502,7 @@ async function buildSpinner() {
     wrap.clipsContent = false;
     wrap.resize(d, d);
 
-    // Track (full ring)
+    // Track (full ring) — stroked ellipse
     const track = figma.createEllipse();
     track.name = 'Track';
     track.resize(d, d);
@@ -6511,26 +6512,16 @@ async function buildSpinner() {
     track.strokeAlign = 'CENTER';
     wrap.appendChild(track);
 
-    // Active arc — 270° open arc as vector path (start at top, sweep clockwise to left).
-    // Inset by half stroke so CENTER-aligned stroke stays inside the wrap bounds.
-    const inset = weight / 2;
-    const cx = d / 2;
-    const cy = d / 2;
-    const r = d / 2 - inset;
-    // start: top (cx, cy - r)
-    // end:   left (cx - r, cy)
-    // large-arc-flag = 1 (270° > 180°), sweep-flag = 1 (clockwise)
-    const arcPath = `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - r} ${cy}`;
-    const arc = figma.createVector();
+    // Active arc — donut sector (filled): outer radius = d/2, inner radius = d/2 - weight.
+    // innerRadius is normalized 0..1.
+    const inner = Math.max(0, (d / 2 - weight) / (d / 2));
+    const arc = figma.createEllipse();
     arc.name = 'Arc';
     arc.resize(d, d);
-    arc.x = 0; arc.y = 0;
-    arc.vectorPaths = [{ windingRule: 'NONE', data: arcPath }];
-    arc.fills = [];
-    arc.strokes = [paintForVar(activeVar)];
-    arc.strokeWeight = weight;
-    arc.strokeAlign = 'CENTER';
-    arc.strokeCap = 'ROUND';
+    arc.strokes = [];
+    arc.fills = [paintForVar(activeVar)];
+    arc.arcData = { startingAngle: 0, endingAngle: Math.PI * 1.5, innerRadius: inner };
+    arc.rotation = -90; // start at top, sweep clockwise
     wrap.appendChild(arc);
 
     return wrap;

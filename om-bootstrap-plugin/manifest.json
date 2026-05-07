@@ -27,6 +27,8 @@
     { "name": "Build Spinner", "command": "buildSpinner" },
     { "name": "Build Menu Item (Molecule)", "command": "buildMenuItem" },
     { "name": "Build Dropdown Menu (Molecule)", "command": "buildDropdownMenu" },
+    { "name": "Build Search Bar (Molecule)", "command": "buildSearchBar" },
+    { "name": "Build Breadcrumb (Molecule)", "command": "buildBreadcrumb" },
     { "name": "Reset Text Styles", "command": "resetTextStyles" },
     { "name": "Reset (Delete OM Collections)", "command": "reset" }
   ]

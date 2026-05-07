@@ -2139,6 +2139,9 @@ const FALLBACK_GLYPHS = {
   'minus':        '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.333 8h9.334" stroke="#101F3E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   'search':       '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="7.333" cy="7.333" r="4.667" stroke="#101F3E" stroke-width="1.3"/><path d="M13.333 13.333l-2.667-2.667" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round"/></svg>',
   'x':            '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4l8 8M12 4l-8 8" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  'filter':       '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.667 4h10.666M4.667 8h6.666M6.667 12h2.666" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  'chevron-right':'<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 4l4 4-4 4" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'home':         '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.667 7.333L8 2.667l5.333 4.666V13a.667.667 0 01-.667.667H3.333A.667.667 0 012.667 13V7.333z" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
 async function findOrCreateIconComponent(name, iconsPage, iconDefaultVar) {
@@ -7354,6 +7357,387 @@ async function buildDropdownMenu() {
 
 
 // =============================================================================
+// SEARCH BAR (Molecule)
+//   Standalone search input with leading search icon + (Filled-only) trailing
+//   clear ✕. Optional trailing Filter button (Boolean).
+//   Variants: Size (XS / Small / Medium / Default) × State (Default / Hover /
+//   Active / Filled / Disabled) = 20.
+//   Atomic: reuses Icon components for search/x/filter; bindIconColorForm is
+//   restricted to vector leaves (no wrapper-FRAME repaint).
+// =============================================================================
+async function buildSearchBar() {
+  console.log('[OM DS] buildSearchBar started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
+                     || figma.root.children.find(p => p.name.includes('Atoms'))
+                     || figma.currentPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  // Idempotent: remove prior set + showcase + orphan components
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Search Bar');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Search Bar')) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Size=.*Search Bar/i.test(c.name))) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {};
+  for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const iconDefault = required['icon/default'];
+  let searchIc = await findIconComp(iconsPage, ['search', 'magnifying-glass']);
+  if (!searchIc) searchIc = await findOrCreateIconComponent('search', iconsPage, iconDefault);
+  let clearIc  = await findIconComp(iconsPage, ['x', 'close', 'x-circle']);
+  if (!clearIc)  clearIc  = await findOrCreateIconComponent('x', iconsPage, iconDefault);
+  let filterIc = await findIconComp(iconsPage, ['filter', 'sliders-horizontal', 'adjustments']);
+  if (!filterIc) filterIc = await findOrCreateIconComponent('filter', iconsPage, iconDefault);
+
+  // Pick colors per state (no status axis — search bars don't carry validation)
+  function pickColors(state) {
+    if (state === 'Disabled') return {
+      bg:          required['state/disabled-bg'],
+      border:      required['state/disabled-border'],
+      text:        required['state/disabled-text'],
+      placeholder: required['state/disabled-text'],
+      icon:        required['state/disabled-text'],
+    };
+    let border = required['border/strong'];
+    if (state === 'Hover')  border = required['text/secondary'];
+    if (state === 'Active') border = required['brand/primary'];
+    return {
+      bg:          required['surface/card'],
+      border,
+      text:        required['text/primary'],
+      placeholder: required['text/tertiary'] || required['text/secondary'],
+      // Search/clear icon match the placeholder/text color of the state
+      icon:        state === 'Filled' ? required['text/primary']
+                 : state === 'Active' ? required['brand/primary']
+                 : (required['text/tertiary'] || required['text/secondary']),
+    };
+  }
+
+  async function makeVariant(size, state) {
+    const spec = FORM_SIZE_SPECS[size];
+    const colors = pickColors(state);
+    const FIELD_W = 320;
+
+    const comp = figma.createComponent();
+    comp.name = `Size=${size}, State=${state}`;
+    comp.layoutMode = 'HORIZONTAL';
+    comp.primaryAxisSizingMode = 'FIXED';
+    comp.counterAxisSizingMode = 'FIXED';
+    comp.counterAxisAlignItems = 'CENTER';
+    comp.itemSpacing = spec.gap;
+    comp.paddingLeft = comp.paddingRight = spec.padX;
+    comp.paddingTop = comp.paddingBottom = 0;
+    comp.cornerRadius = spec.radius;
+    comp.fills  = [paintForVar(colors.bg)];
+    comp.strokes = [paintForVar(colors.border)];
+    comp.strokeWeight = 1;
+    comp.strokeAlign = 'INSIDE';
+    comp.resize(FIELD_W, spec.h);
+
+    // Leading search icon — always visible
+    const sIc = searchIc.createInstance();
+    sIc.name = 'Search Icon';
+    sIc.resize(spec.icon, spec.icon);
+    bindIconColorForm(sIc, colors.icon);
+    comp.appendChild(sIc);
+    try { sIc.layoutSizingHorizontal = 'FIXED'; sIc.layoutSizingVertical = 'FIXED'; } catch (e) {}
+
+    // Input text
+    const input = figma.createText();
+    const txtStyle = styleByName[spec.fontText];
+    if (txtStyle) await input.setTextStyleIdAsync(txtStyle.id);
+    input.characters = state === 'Filled' ? 'invoice 2026' : 'Search…';
+    input.fills = [paintForVar(state === 'Filled' ? colors.text : colors.placeholder)];
+    input.textAutoResize = 'WIDTH_AND_HEIGHT';
+    comp.appendChild(input);
+    try { input.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    // Trailing clear ✕ — always created, visible only in Filled
+    const xIc = clearIc.createInstance();
+    xIc.name = 'Clear';
+    xIc.resize(spec.icon, spec.icon);
+    bindIconColorForm(xIc, colors.icon);
+    xIc.visible = (state === 'Filled');
+    comp.appendChild(xIc);
+    try { xIc.layoutSizingHorizontal = 'FIXED'; xIc.layoutSizingVertical = 'FIXED'; } catch (e) {}
+
+    // Trailing filter — always created, hidden by default (boolean prop)
+    const fIc = filterIc.createInstance();
+    fIc.name = 'Filter';
+    fIc.resize(spec.icon, spec.icon);
+    bindIconColorForm(fIc, colors.icon);
+    fIc.visible = false;
+    comp.appendChild(fIc);
+    try { fIc.layoutSizingHorizontal = 'FIXED'; fIc.layoutSizingVertical = 'FIXED'; } catch (e) {}
+
+    return { comp, sIc, xIc, fIc };
+  }
+
+  const SIZES  = ['XS', 'Small', 'Medium', 'Default'];
+  const STATES = ['Default', 'Hover', 'Active', 'Filled', 'Disabled'];
+
+  const allVariants = [];
+  const variantMeta = [];
+  const clears = [], filters = [];
+  for (const size of SIZES) {
+    for (const state of STATES) {
+      const r = await makeVariant(size, state);
+      allVariants.push(r.comp);
+      variantMeta.push({ size, state });
+      clears.push(r.xIc);
+      filters.push(r.fIc);
+    }
+  }
+  console.log('[OM DS] Search Bar variants built:', allVariants.length);
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Search Bar';
+  compSet.layoutMode = 'NONE';
+  compSet.fills = [];
+
+  // Booleans
+  const propIds = {};
+  try { propIds.clear  = compSet.addComponentProperty('Has Clear',  'BOOLEAN', true);  } catch (e) {}
+  try { propIds.filter = compSet.addComponentProperty('Has Filter', 'BOOLEAN', false); } catch (e) {}
+  if (propIds.clear)  for (const n of clears)  try { n.componentPropertyReferences = { visible: propIds.clear  }; } catch (e) {}
+  if (propIds.filter) for (const n of filters) try { n.componentPropertyReferences = { visible: propIds.filter }; } catch (e) {}
+
+  // Showcase grid: cols = States (5), rows = Sizes (4)
+  const PAD_LEFT = 220, PAD_TOP = 160, PAD_RIGHT = 56, PAD_BOT = 56;
+  const COL_W = 360, ROW_H = 90;
+
+  const colGroups = [{
+    name: 'State', x: PAD_LEFT, width: COL_W * STATES.length,
+    sizes: STATES.map((s, i) => ({ name: s, x: PAD_LEFT + i * COL_W, width: COL_W })),
+  }];
+  const rowGroups = [];
+  let cy = PAD_TOP;
+  for (const size of SIZES) {
+    rowGroups.push({ name: size, y: cy, states: [{ name: '', y: cy, height: ROW_H }] });
+    cy += ROW_H;
+  }
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i];
+    const m = variantMeta[i];
+    const colIdx = STATES.indexOf(m.state);
+    const rg = rowGroups.find(r => r.name === m.size);
+    v.x = Math.round(PAD_LEFT + colIdx * COL_W + (COL_W - v.width) / 2);
+    v.y = Math.round(rg.y + (ROW_H - v.height) / 2);
+  }
+  compSet.resize(PAD_LEFT + STATES.length * COL_W + PAD_RIGHT, cy + PAD_BOT);
+
+  let maxBottom = 0;
+  for (const node of moleculesPage.children) {
+    if (node === compSet) continue;
+    if (node.type !== 'COMPONENT_SET' && node.type !== 'COMPONENT' && node.type !== 'FRAME') continue;
+    if ('y' in node && 'height' in node) { const b = node.y + node.height; if (b > maxBottom) maxBottom = b; }
+  }
+  compSet.x = 0;
+  compSet.y = maxBottom > 0 ? Math.round(maxBottom + 120) : 0;
+
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'],
+    sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'],
+    labelSecondaryVar: required['text/secondary'],
+    componentName: 'Search Bar',
+    surfaceVar: required['surface/card'],
+    borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Search Bar built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
+// BREADCRUMB (Molecule)
+//   Horizontal trail of links separated by "›" (chevron-right) icons.
+//   Variants:
+//     Length:  2 / 3 / 4 / 5 (number of crumbs incl. current page)
+//     Style:   Default / With Home Icon / Truncated (uses "…")
+//     State:   Default (last item highlighted as current — text/primary;
+//              prior items as text/secondary links)
+//   Booleans: Has Home Icon (overrides leading crumb to Home icon)
+//   Atoms reused: Icon components for chevron-right + home.
+// =============================================================================
+async function buildBreadcrumb() {
+  console.log('[OM DS] buildBreadcrumb started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
+                     || figma.root.children.find(p => p.name.includes('Atoms'))
+                     || figma.currentPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Breadcrumb');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Breadcrumb')) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Length=.*Breadcrumb/i.test(c.name))) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {};
+  for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const iconDefault = required['icon/default'];
+  let chevronIc = await findIconComp(iconsPage, ['chevron-right', 'caret-right']);
+  if (!chevronIc) chevronIc = await findOrCreateIconComponent('chevron-right', iconsPage, iconDefault);
+  let homeIc = await findIconComp(iconsPage, ['home', 'house']);
+  if (!homeIc) homeIc = await findOrCreateIconComponent('home', iconsPage, iconDefault);
+
+  const SIZES = { Small: { font: 'Body/Small', icon: 14, gap: 6 }, Default: { font: 'Body/Default', icon: 16, gap: 8 } };
+  const SAMPLE_LABELS = ['Home', 'Workspace', 'Projects', 'Design System', 'Components', 'Search Bar'];
+
+  async function makeCrumbText(label, isCurrent, fontStyleName) {
+    const t = figma.createText();
+    const s = styleByName[fontStyleName];
+    if (s) await t.setTextStyleIdAsync(s.id);
+    t.characters = label;
+    t.fills = [paintForVar(isCurrent ? required['text/primary'] : required['text/secondary'])];
+    t.textAutoResize = 'WIDTH_AND_HEIGHT';
+    return t;
+  }
+
+  async function makeVariant(size, length, style) {
+    const spec = SIZES[size];
+    const comp = figma.createComponent();
+    comp.name = `Size=${size}, Length=${length}, Style=${style}`;
+    comp.layoutMode = 'HORIZONTAL';
+    comp.primaryAxisSizingMode = 'AUTO';
+    comp.counterAxisSizingMode = 'AUTO';
+    comp.counterAxisAlignItems = 'CENTER';
+    comp.itemSpacing = spec.gap;
+    comp.paddingLeft = comp.paddingRight = comp.paddingTop = comp.paddingBottom = 0;
+    comp.fills = [];
+
+    // Build crumb sequence; if Truncated and length>=4, replace middle with "…"
+    let labels = SAMPLE_LABELS.slice(0, length);
+    let useEllipsis = (style === 'Truncated' && length >= 4);
+    if (useEllipsis) {
+      // Keep first + ellipsis + last 2
+      labels = [labels[0], '…', labels[labels.length - 2], labels[labels.length - 1]];
+    }
+
+    for (let i = 0; i < labels.length; i++) {
+      const isCurrent = (i === labels.length - 1);
+      const isFirst   = (i === 0);
+
+      // Leading Home icon swaps the first text crumb when Style=With Home Icon
+      if (isFirst && style === 'With Home Icon') {
+        const ic = homeIc.createInstance();
+        ic.name = 'Home';
+        ic.resize(spec.icon, spec.icon);
+        bindIconColorForm(ic, required['text/secondary']);
+        comp.appendChild(ic);
+        try { ic.layoutSizingHorizontal = 'FIXED'; ic.layoutSizingVertical = 'FIXED'; } catch (e) {}
+      } else {
+        const t = await makeCrumbText(labels[i], isCurrent, spec.font);
+        comp.appendChild(t);
+      }
+
+      // Separator after every crumb except the last
+      if (i < labels.length - 1) {
+        const sep = chevronIc.createInstance();
+        sep.name = 'Separator';
+        sep.resize(spec.icon, spec.icon);
+        bindIconColorForm(sep, required['text/tertiary'] || required['text/secondary']);
+        comp.appendChild(sep);
+        try { sep.layoutSizingHorizontal = 'FIXED'; sep.layoutSizingVertical = 'FIXED'; } catch (e) {}
+      }
+    }
+
+    return { comp };
+  }
+
+  const SIZES_ORDER = ['Small', 'Default'];
+  const LENGTHS = ['2', '3', '4', '5'];
+  const STYLES  = ['Default', 'With Home Icon', 'Truncated'];
+
+  const allVariants = [];
+  const variantMeta = [];
+  for (const size of SIZES_ORDER) {
+    for (const length of LENGTHS) {
+      for (const style of STYLES) {
+        // Truncated only meaningful with length >= 4
+        if (style === 'Truncated' && Number(length) < 4) continue;
+        const r = await makeVariant(size, length, style);
+        allVariants.push(r.comp);
+        variantMeta.push({ size, length, style });
+      }
+    }
+  }
+  console.log('[OM DS] Breadcrumb variants built:', allVariants.length);
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Breadcrumb';
+  compSet.layoutMode = 'NONE';
+  compSet.fills = [];
+
+  // Layout: cols = Style (3), rows = Length (4) × Size (2)
+  const PAD_LEFT = 220, PAD_TOP = 160, PAD_RIGHT = 56, PAD_BOT = 56;
+  const COL_W = 360, ROW_H = 64, GROUP_GAP = 40;
+
+  const colGroups = [{
+    name: 'Style', x: PAD_LEFT, width: COL_W * STYLES.length,
+    sizes: STYLES.map((s, i) => ({ name: s, x: PAD_LEFT + i * COL_W, width: COL_W })),
+  }];
+  const rowGroups = [];
+  let cy = PAD_TOP;
+  for (const size of SIZES_ORDER) {
+    const states = LENGTHS.map((l, i) => ({ name: `${l} crumbs`, y: cy + i * ROW_H, height: ROW_H }));
+    rowGroups.push({ name: size, y: cy, states });
+    cy += LENGTHS.length * ROW_H + GROUP_GAP;
+  }
+
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i];
+    const m = variantMeta[i];
+    const colIdx = STYLES.indexOf(m.style);
+    const rg = rowGroups.find(r => r.name === m.size);
+    const st = rg.states.find(s => s.name === `${m.length} crumbs`);
+    v.x = Math.round(PAD_LEFT + colIdx * COL_W + 16);
+    v.y = Math.round(st.y + (ROW_H - v.height) / 2);
+  }
+  compSet.resize(PAD_LEFT + STYLES.length * COL_W + PAD_RIGHT, cy + PAD_BOT);
+
+  let maxBottom = 0;
+  for (const node of moleculesPage.children) {
+    if (node === compSet) continue;
+    if (node.type !== 'COMPONENT_SET' && node.type !== 'COMPONENT' && node.type !== 'FRAME') continue;
+    if ('y' in node && 'height' in node) { const b = node.y + node.height; if (b > maxBottom) maxBottom = b; }
+  }
+  compSet.x = 0;
+  compSet.y = maxBottom > 0 ? Math.round(maxBottom + 120) : 0;
+
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'],
+    sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'],
+    labelSecondaryVar: required['text/secondary'],
+    componentName: 'Breadcrumb',
+    surfaceVar: required['surface/card'],
+    borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Breadcrumb built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
 // DROPDOWN — Single + Multi-Chips + Multi-Inline merged
 //   Type: Single | Multi-Chips | Multi-Inline
 //   Size: Small | Default | Large
@@ -7757,6 +8141,10 @@ async function rebuildAll() {
       await buildMenuItem();
     } else if (figma.command === 'buildDropdownMenu') {
       await buildDropdownMenu();
+    } else if (figma.command === 'buildSearchBar') {
+      await buildSearchBar();
+    } else if (figma.command === 'buildBreadcrumb') {
+      await buildBreadcrumb();
     } else {
       await bootstrap();
     }

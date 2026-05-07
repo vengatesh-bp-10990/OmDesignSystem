@@ -48,6 +48,7 @@
     { "name": "Build Sidebar (Molecule)", "command": "buildSidebar" },
     { "name": "Build Empty State (Molecule)", "command": "buildEmptyState" },
     { "name": "Build Component Tokens (All — backfill aliases)", "command": "buildComponentTokens" },
+    { "name": "Build All Wired (Single Build — all components → Component/X)", "command": "buildAllWired" },
     { "name": "Cleanup _glyph Fallback Icons", "command": "cleanupFallbackIcons" },
     { "name": "Reset Text Styles", "command": "resetTextStyles" },
     { "name": "Reset (Delete OM Collections)", "command": "reset" }

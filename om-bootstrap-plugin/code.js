@@ -5509,7 +5509,7 @@ const FORM_SIZE_SPECS = {
 const FORM_LABEL_STYLE = 'Label/Default';
 
 // Resolve all form-related tokens (used by all 4 builders)
-async function resolveFormTokens() {
+async function resolveFormTokens(componentName) {
   const collections = await figma.variables.getLocalVariableCollectionsAsync();
   const appearanceCol = collections.find(c => c.name === '_Appearance');
   const themeCol = collections.find(c => c.name === '_Theme');
@@ -5564,6 +5564,37 @@ async function resolveFormTokens() {
   for (const [k, v] of Object.entries(required)) {
     if (!v) console.warn('[OM DS] form token missing:', k);
   }
+
+  // Per-component wiring: when a componentName is provided AND that component
+  // has a spec in COMPONENT_TOKEN_SPECS, substitute the matching semantic vars
+  // with their Component/{Name} aliases. This auto-creates the collection +
+  // variables if missing, so layers bind to Component/X tokens (locked rule).
+  if (componentName && typeof COMPONENT_TOKEN_SPECS !== 'undefined' && COMPONENT_TOKEN_SPECS[componentName]) {
+    try {
+      const spec = COMPONENT_TOKEN_SPECS[componentName];
+      const colName = `Component/${componentName}`;
+      const col = await getOrCreateCollection(colName, ['Default']);
+      // Build a map: semanticName -> [tokenName...] from the spec, so we know
+      // which Component/X variable to use for each semantic token.
+      // First spec entry wins when multiple alias the same semantic.
+      const usedSemantic = new Set();
+      for (const [tokenName, semanticName] of Object.entries(spec)) {
+        const sourceVar = required[semanticName];
+        if (!sourceVar) continue;
+        const v = await getOrCreateVariable(tokenName, col, 'COLOR');
+        try {
+          v.setValueForMode(col.modes[0].modeId, figma.variables.createVariableAlias(sourceVar));
+        } catch (e) { /* alias already set or read-only */ }
+        if (!usedSemantic.has(semanticName)) {
+          required[semanticName] = v;  // override so paintForVar uses Component/X var
+          usedSemantic.add(semanticName);
+        }
+      }
+    } catch (e) {
+      console.warn(`[OM DS] component-token wiring failed for ${componentName}:`, e.message);
+    }
+  }
+
   return required;
 }
 
@@ -5662,7 +5693,7 @@ async function findIconComp(iconsPage, names, fallbackColor) {
 async function buildLabel() {
   console.log('[OM DS] buildLabel started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Label');
 
   const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || figma.currentPage;
   await figma.setCurrentPageAsync(atomsPage);
@@ -5809,7 +5840,7 @@ async function findLabelComponent(state) {
 async function buildTextField() {
   console.log('[OM DS] buildTextField started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('TextField');
 
   const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || figma.currentPage;
   await figma.setCurrentPageAsync(atomsPage);
@@ -6062,7 +6093,7 @@ async function buildTextField() {
 async function buildTextarea() {
   console.log('[OM DS] buildTextarea started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Textarea');
 
   const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || figma.currentPage;
   await figma.setCurrentPageAsync(atomsPage);
@@ -6245,7 +6276,7 @@ const CHIP_SIZE_SPECS = {
 async function buildChip() {
   console.log('[OM DS] buildChip started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Chip');
 
   const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || figma.currentPage;
   await figma.setCurrentPageAsync(atomsPage);
@@ -6414,7 +6445,7 @@ async function findChipComponent(size, state) {
 async function buildDivider() {
   console.log('[OM DS] buildDivider started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Divider');
 
   const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || figma.currentPage;
   await figma.setCurrentPageAsync(atomsPage);
@@ -6612,7 +6643,7 @@ const SPINNER_SIZE_SPECS = {
 async function buildSpinner() {
   console.log('[OM DS] buildSpinner started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Spinner');
 
   // Need brand/on-primary too
   const allColorVars = await figma.variables.getLocalVariablesAsync('COLOR');
@@ -6854,7 +6885,7 @@ function menuShadowEffects() {
 async function buildMenuItem() {
   console.log('[OM DS] buildMenuItem started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('MenuItem');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
                      || figma.root.children.find(p => p.name.includes('Atoms'))
@@ -7128,7 +7159,7 @@ async function buildMenuItem() {
 async function buildDropdownMenu() {
   console.log('[OM DS] buildDropdownMenu started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('DropdownMenu');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
                      || figma.root.children.find(p => p.name.includes('Atoms'))
@@ -7519,7 +7550,7 @@ async function buildDropdownMenu() {
 async function buildSearchBar() {
   console.log('[OM DS] buildSearchBar started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('SearchBar');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
                      || figma.root.children.find(p => p.name.includes('Atoms'))
@@ -7723,7 +7754,7 @@ async function buildSearchBar() {
 async function buildBreadcrumb() {
   console.log('[OM DS] buildBreadcrumb started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Breadcrumb');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
                      || figma.root.children.find(p => p.name.includes('Atoms'))
@@ -7947,7 +7978,7 @@ function autoPositionBelow(page, compSet, gap) {
 async function buildTabs() {
   console.log('[OM DS] buildTabs started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Tabs');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
                      || figma.root.children.find(p => p.name.includes('Atoms'))
@@ -8296,7 +8327,7 @@ async function buildTabs() {
 async function buildPagination() {
   console.log('[OM DS] buildPagination started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Pagination');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
                      || figma.root.children.find(p => p.name.includes('Atoms'))
@@ -8489,7 +8520,7 @@ async function buildPagination() {
 async function buildCard() {
   console.log('[OM DS] buildCard started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Card');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
                      || figma.root.children.find(p => p.name.includes('Atoms'))
@@ -8679,7 +8710,7 @@ async function buildCard() {
 async function buildAlert() {
   console.log('[OM DS] buildAlert started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Alert');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
                      || figma.root.children.find(p => p.name.includes('Atoms'))
@@ -8851,7 +8882,7 @@ async function buildAlert() {
 async function buildToast() {
   console.log('[OM DS] buildToast started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Toast');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
                      || figma.root.children.find(p => p.name.includes('Atoms'))
@@ -9026,7 +9057,7 @@ async function buildToast() {
 async function buildProgress() {
   console.log('[OM DS] buildProgress started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Progress');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
                      || figma.root.children.find(p => p.name.includes('Atoms'))
@@ -9130,7 +9161,7 @@ async function buildProgress() {
 async function buildSkeleton() {
   console.log('[OM DS] buildSkeleton started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Skeleton');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
                      || figma.root.children.find(p => p.name.includes('Atoms'))
@@ -9252,7 +9283,7 @@ async function buildSkeleton() {
 async function buildAccordion() {
   console.log('[OM DS] buildAccordion started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Accordion');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
                      || figma.root.children.find(p => p.name.includes('Atoms'))
@@ -9457,7 +9488,7 @@ async function buildAccordion() {
 async function buildTabs2() {
   console.log('[OM DS] buildTabs2 (Tabs molecule, instance-based) started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Tabs');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
                      || figma.root.children.find(p => p.name.includes('Atoms'))
@@ -9657,7 +9688,7 @@ async function buildTabs2() {
 async function buildCalendar() {
   console.log('[OM DS] buildCalendar started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Calendar');
 
   const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || figma.currentPage;
   await figma.setCurrentPageAsync(atomsPage);
@@ -9980,7 +10011,7 @@ async function buildCalendar() {
 async function buildDatePicker() {
   console.log('[OM DS] buildDatePicker started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('DatePicker');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules')) || figma.currentPage;
   const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || moleculesPage;
@@ -10174,7 +10205,7 @@ async function buildDatePicker() {
 async function buildRangePicker() {
   console.log('[OM DS] buildRangePicker started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('RangePicker');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules')) || figma.currentPage;
   const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || moleculesPage;
@@ -10367,7 +10398,7 @@ async function buildRangePicker() {
 async function buildTimePicker() {
   console.log('[OM DS] buildTimePicker started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('TimePicker');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules')) || figma.currentPage;
   const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || moleculesPage;
@@ -10607,7 +10638,7 @@ async function buildTimePicker() {
 async function buildDateTimePicker() {
   console.log('[OM DS] buildDateTimePicker started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('DateTimePicker');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules')) || figma.currentPage;
   const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || moleculesPage;
@@ -10927,7 +10958,7 @@ async function buildDateTimePicker() {
 async function buildModal() {
   console.log('[OM DS] buildModal started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Modal');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules')) || figma.currentPage;
   const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || moleculesPage;
@@ -11264,7 +11295,7 @@ async function buildModal() {
 async function buildStepper() {
   console.log('[OM DS] buildStepper started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Stepper');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules')) || figma.currentPage;
   await figma.setCurrentPageAsync(moleculesPage);
@@ -11515,7 +11546,7 @@ async function buildStepper() {
 async function buildSidebar() {
   console.log('[OM DS] buildSidebar started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Sidebar');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules')) || figma.currentPage;
   await figma.setCurrentPageAsync(moleculesPage);
@@ -11871,7 +11902,7 @@ async function buildSidebar() {
 async function buildEmptyState() {
   console.log('[OM DS] buildEmptyState started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('EmptyState');
 
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules')) || figma.currentPage;
   const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || moleculesPage;
@@ -12042,7 +12073,7 @@ async function buildEmptyState() {
 async function buildDropdown() {
   console.log('[OM DS] buildDropdown started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
-  const required = await resolveFormTokens();
+  const required = await resolveFormTokens('Dropdown');
 
   const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || figma.currentPage;
   await figma.setCurrentPageAsync(atomsPage);
@@ -12748,6 +12779,84 @@ async function buildComponentTokens() {
   figma.notify(`✅ Component tokens: ${createdCollections} collections, ${aliasedVars} variables aliased${missing.length ? ` (${missing.length} missing — see console)` : ''}.`);
 }
 
+// =============================================================================
+// BUILD ALL WIRED — single command that:
+//   1. Ensures all Component/{Name} collections + aliases exist.
+//   2. Rebuilds every component in dependency order so layers bind directly to
+//      their Component/X tokens (the locked rule). Visuals are unchanged
+//      because Component/X aliases the same semantic source.
+// =============================================================================
+async function buildAllWired() {
+  console.log('[OM DS] buildAllWired started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+
+  // 1. Ensure all Component/X collections exist (also creates them upfront so
+  //    resolveFormTokens(name) substitutions inside each builder hit existing
+  //    vars rather than racing creation).
+  await buildComponentTokens();
+
+  // 2. Build order honors atomic-composition dependencies:
+  //    icons → button family → form atoms → simple atoms → molecules using atoms.
+  const order = [
+    { name: 'Button',          fn: typeof buildButton          === 'function' ? buildButton          : null },
+    { name: 'IconButton',      fn: typeof buildIconButton      === 'function' ? buildIconButton      : null },
+    { name: 'SplitButton',     fn: typeof buildSplitButton     === 'function' ? buildSplitButton     : null },
+    { name: 'Checkbox',        fn: typeof buildCheckbox        === 'function' ? buildCheckbox        : null },
+    { name: 'Radio',           fn: typeof buildRadio           === 'function' ? buildRadio           : null },
+    { name: 'Toggle',          fn: typeof buildToggle          === 'function' ? buildToggle          : null },
+    { name: 'Badge',           fn: typeof buildBadge           === 'function' ? buildBadge           : null },
+    { name: 'Tooltip',         fn: typeof buildTooltip         === 'function' ? buildTooltip         : null },
+    { name: 'Avatar',          fn: typeof buildAvatar          === 'function' ? buildAvatar          : null },
+    { name: 'Label',           fn: typeof buildLabel           === 'function' ? buildLabel           : null },
+    { name: 'Chip',            fn: typeof buildChip            === 'function' ? buildChip            : null },
+    { name: 'TextField',       fn: typeof buildTextField       === 'function' ? buildTextField       : null },
+    { name: 'Textarea',        fn: typeof buildTextarea        === 'function' ? buildTextarea        : null },
+    { name: 'Dropdown',        fn: typeof buildDropdown        === 'function' ? buildDropdown        : null },
+    { name: 'Divider',         fn: typeof buildDivider         === 'function' ? buildDivider         : null },
+    { name: 'Spinner',         fn: typeof buildSpinner         === 'function' ? buildSpinner         : null },
+    { name: 'MenuItem',        fn: typeof buildMenuItem        === 'function' ? buildMenuItem        : null },
+    { name: 'DropdownMenu',    fn: typeof buildDropdownMenu    === 'function' ? buildDropdownMenu    : null },
+    { name: 'SearchBar',       fn: typeof buildSearchBar       === 'function' ? buildSearchBar       : null },
+    { name: 'Breadcrumb',      fn: typeof buildBreadcrumb      === 'function' ? buildBreadcrumb      : null },
+    { name: 'Tabs',            fn: typeof buildTabs            === 'function' ? buildTabs            : null },
+    { name: 'Pagination',      fn: typeof buildPagination      === 'function' ? buildPagination      : null },
+    { name: 'Card',            fn: typeof buildCard            === 'function' ? buildCard            : null },
+    { name: 'Alert',           fn: typeof buildAlert           === 'function' ? buildAlert           : null },
+    { name: 'Toast',           fn: typeof buildToast           === 'function' ? buildToast           : null },
+    { name: 'Progress',        fn: typeof buildProgress        === 'function' ? buildProgress        : null },
+    { name: 'Skeleton',        fn: typeof buildSkeleton        === 'function' ? buildSkeleton        : null },
+    { name: 'Accordion',       fn: typeof buildAccordion       === 'function' ? buildAccordion       : null },
+    { name: 'Calendar',        fn: typeof buildCalendar        === 'function' ? buildCalendar        : null },
+    { name: 'DatePicker',      fn: typeof buildDatePicker      === 'function' ? buildDatePicker      : null },
+    { name: 'RangePicker',     fn: typeof buildRangePicker     === 'function' ? buildRangePicker     : null },
+    { name: 'TimePicker',      fn: typeof buildTimePicker      === 'function' ? buildTimePicker      : null },
+    { name: 'DateTimePicker',  fn: typeof buildDateTimePicker  === 'function' ? buildDateTimePicker  : null },
+    { name: 'Modal',           fn: typeof buildModal           === 'function' ? buildModal           : null },
+    { name: 'Stepper',         fn: typeof buildStepper         === 'function' ? buildStepper         : null },
+    { name: 'Sidebar',         fn: typeof buildSidebar         === 'function' ? buildSidebar         : null },
+    { name: 'EmptyState',      fn: typeof buildEmptyState      === 'function' ? buildEmptyState      : null },
+  ];
+
+  const ok = []; const failed = [];
+  for (const step of order) {
+    if (!step.fn) continue;
+    try {
+      console.log(`[OM DS] buildAllWired: ${step.name}…`);
+      await step.fn();
+      ok.push(step.name);
+    } catch (e) {
+      console.error(`[OM DS] ${step.name} failed:`, e);
+      failed.push(`${step.name} (${e.message})`);
+    }
+  }
+  console.log(`[OM DS] buildAllWired done. ok=${ok.length} failed=${failed.length}`);
+  if (failed.length) {
+    figma.notify(`⚠️ Built ${ok.length}/${ok.length + failed.length}. Failed: ${failed.join(', ')}`, { error: true, timeout: 8000 });
+  } else {
+    figma.notify(`✅ Built all ${ok.length} components (wired to Component/X tokens).`, { timeout: 6000 });
+  }
+}
+
 (async () => {
   try {
     console.log('[OM DS] Plugin start. command =', figma.command);
@@ -12755,6 +12864,8 @@ async function buildComponentTokens() {
       await reset();
     } else if (figma.command === 'resetTextStyles') {
       await resetTextStyles();
+    } else if (figma.command === 'buildAllWired') {
+      await buildAllWired();
     } else if (figma.command === 'buildComponentTokens') {
       await buildComponentTokens();
     } else if (figma.command === 'buildIcons') {

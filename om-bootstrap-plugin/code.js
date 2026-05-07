@@ -10014,20 +10014,17 @@ async function buildDatePicker() {
   const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
   const calendarIc = await findIconComp(iconsPage, ['calendar', 'calendar-days', 'event']);
 
-  async function setFieldText(inst, value, hasValue, isDisabled) {
+  async function setFieldText(inst, value) {
     // The TextField's `Field` frame contains exactly one TEXT child (the input).
+    // We ONLY override the characters — fills are already bound to the correct
+    // variable by the underlying TextField variant (text/primary for Filled,
+    // text/tertiary for Empty placeholder, state/disabled-text for Disabled).
+    // Re-painting here would break the variable binding inside the instance.
     const field = inst.findOne(n => n.type === 'FRAME' && n.name === 'Field');
     const t = field && field.findOne(n => n.type === 'TEXT');
     if (!t) return;
     try { await figma.loadFontAsync(t.fontName); } catch (e) {}
     try { t.characters = value; } catch (e) {}
-    // Disabled always uses disabled-text; otherwise primary for filled, tertiary for placeholder
-    try {
-      const colorVar = isDisabled
-        ? required['state/disabled-text']
-        : (hasValue ? required['text/primary'] : required['text/tertiary']);
-      t.fills = [paintForVar(colorVar)];
-    } catch (e) {}
   }
 
   async function setLabelText(inst, value) {
@@ -10080,7 +10077,7 @@ async function buildDatePicker() {
     tfInst.name = 'Trigger';
     wrap.appendChild(tfInst);
     await setLabelText(tfInst, 'Date');
-    await setFieldText(tfInst, hasValue ? 'May 7, 2026' : 'Select date', hasValue, state === 'Disabled');
+    await setFieldText(tfInst, hasValue ? 'May 7, 2026' : 'Select date');
     await bindSuffixIcon(tfInst);
 
     if (state === 'Open') {
@@ -10202,18 +10199,13 @@ async function buildRangePicker() {
   const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
   const calendarIc = await findIconComp(iconsPage, ['calendar', 'calendar-days', 'event']);
 
-  async function setFieldText(inst, value, hasValue, isDisabled) {
+  async function setFieldText(inst, value) {
+    // Characters-only override (see Date Picker for rationale).
     const field = inst.findOne(n => n.type === 'FRAME' && n.name === 'Field');
     const t = field && field.findOne(n => n.type === 'TEXT');
     if (!t) return;
     try { await figma.loadFontAsync(t.fontName); } catch (e) {}
     try { t.characters = value; } catch (e) {}
-    try {
-      const colorVar = isDisabled
-        ? required['state/disabled-text']
-        : (hasValue ? required['text/primary'] : required['text/tertiary']);
-      t.fills = [paintForVar(colorVar)];
-    } catch (e) {}
   }
 
   async function setLabelText(inst, value) {
@@ -10270,7 +10262,7 @@ async function buildRangePicker() {
     tfInst.name = 'Trigger';
     wrap.appendChild(tfInst);
     await setLabelText(tfInst, 'Date range');
-    await setFieldText(tfInst, hasValue ? 'May 10 – May 17, 2026' : 'Select date range', hasValue, state === 'Disabled');
+    await setFieldText(tfInst, hasValue ? 'May 10 – May 17, 2026' : 'Select date range');
     await bindSuffixIcon(tfInst);
 
     if (state === 'Open') {

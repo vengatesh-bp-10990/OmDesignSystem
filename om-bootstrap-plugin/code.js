@@ -14026,8 +14026,8 @@ async function buildTableCells() {
     c.primaryAxisAlignItems = align === 'Right' ? 'MAX' : align === 'Center' ? 'CENTER' : 'MIN';
     c.fills = []; // Transparent — Row owns bg
     c.resize(width, 1);
-    c.counterAxisSizingMode = 'FIXED';
-    c.primaryAxisSizingMode = 'AUTO';
+    c.primaryAxisSizingMode = 'FIXED';   // fixed width
+    c.counterAxisSizingMode = 'AUTO';    // hug height
     return c;
   }
 
@@ -14341,8 +14341,8 @@ async function buildTableHeaderCell() {
         c.strokeBottomWeight = 1;
         c.strokeTopWeight = c.strokeLeftWeight = c.strokeRightWeight = 0;
         c.resize(220, 1);
-        c.counterAxisSizingMode = 'FIXED';
-        c.primaryAxisSizingMode = 'AUTO';
+        c.primaryAxisSizingMode = 'FIXED';
+        c.counterAxisSizingMode = 'AUTO';
 
         const isActive = sort !== 'None';
         const labelColor = tk(isActive ? 'text/active' : 'text/default');
@@ -14455,8 +14455,8 @@ async function buildTableRow() {
       r.strokeTopWeight = 2;
     }
     r.resize(ROW_W, 1);
-    r.counterAxisSizingMode = 'FIXED';
-    r.primaryAxisSizingMode = 'AUTO';
+    r.primaryAxisSizingMode = 'FIXED';
+    r.counterAxisSizingMode = 'AUTO';
 
     // Slot 3 sample cells so the row has visible structure
     if (textCellDef) {

@@ -6659,18 +6659,28 @@ const MENU_ITEM_SIZE_SPECS = {
   Default: { h: 36, padX: 12, font: 'Body/Default', gap: 10, icon: 16, radius: 6 },
 };
 
-async function findCheckboxComponent(state /* 'Off' | 'On' */) {
+async function findCheckboxComponent(checked /* 'Checked'|'Unchecked' */, state /* 'Default'|'Disabled' */) {
   try { await figma.loadAllPagesAsync(); } catch (e) {}
   const atomsPage = figma.root.children.find(p => p.name.includes('Atoms'));
   if (!atomsPage) return null;
   const set = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Checkbox');
   if (!set) return null;
-  const want = state === 'On'
-    ? /State=On|Checked|=On|=Checked/i
-    : /State=Off|Unchecked|=Off|Default/i;
-  return set.children.find(c => want.test(c.name))
-      || set.defaultVariant
-      || set.children[0];
+  state = state || 'Default';
+  // Prefer smallest Size + Content=None when present.
+  const wantSize    = /Size=Small/i;
+  const wantState   = new RegExp(`State=${state}`, 'i');
+  const wantChecked = new RegExp(`Checked=${checked}`, 'i');
+  const wantContent = /Content=(None|none|Default)/i;
+  const score = (c) => (wantState.test(c.name) ? 8 : 0)
+                    + (wantChecked.test(c.name) ? 4 : 0)
+                    + (wantSize.test(c.name) ? 2 : 0)
+                    + (wantContent.test(c.name) ? 1 : 0);
+  let best = null, bestScore = -1;
+  for (const c of set.children) {
+    const s = score(c);
+    if (s > bestScore) { best = c; bestScore = s; }
+  }
+  return best || set.defaultVariant || set.children[0];
 }
 
 // Light shadow for popovers (subtle elevation)
@@ -6713,8 +6723,15 @@ async function buildMenuItem() {
   const leadIc   = await findIconComp(iconsPage, ['user', 'profile', 'home', 'settings', 'star']);
   const trailIc  = await findIconComp(iconsPage, ['chevron-right', 'arrow-right', 'caret-right']);
   const checkIc  = await findIconComp(iconsPage, ['check', 'tick', 'checkmark', 'check-mark']);
-  const checkOn  = await findCheckboxComponent('On');
-  const checkOff = await findCheckboxComponent('Off');
+  const checkOnDef   = await findCheckboxComponent('Checked',   'Default');
+  const checkOffDef  = await findCheckboxComponent('Unchecked', 'Default');
+  const checkOnDis   = await findCheckboxComponent('Checked',   'Disabled');
+  const checkOffDis  = await findCheckboxComponent('Unchecked', 'Disabled');
+  const cbForMenu = (menuState) => {
+    if (menuState === 'Selected') return checkOnDef  || checkOffDef;
+    if (menuState === 'Disabled') return checkOffDis || checkOffDef;
+    return checkOffDef;
+  };
 
   function colorsFor(state) {
     if (state === 'Disabled') return {
@@ -6769,7 +6786,7 @@ async function buildMenuItem() {
     let leadInst = null;
     let cbInst = null;
     if (type === 'Multi-Select') {
-      const cbComp = state === 'Selected' ? checkOn : checkOff;
+      const cbComp = cbForMenu(state);
       if (cbComp) {
         cbInst = cbComp.createInstance();
         cbInst.name = 'Checkbox';
@@ -6985,8 +7002,7 @@ async function buildDropdownMenu() {
   const searchIc = await findIconComp(iconsPage, ['search', 'magnifying-glass']);
   const emptyIc  = await findIconComp(iconsPage, ['search', 'inbox', 'folder', 'file']);
   const checkIc  = await findIconComp(iconsPage, ['check', 'tick', 'checkmark']);
-  const checkOn  = await findCheckboxComponent('On');
-  const checkOff = await findCheckboxComponent('Off');
+  const checkOff = await findCheckboxComponent('Unchecked', 'Default');
 
   // ---- helpers (declared inside; capture required + styleByName) ----
   function makeSearchRow(size, mode /* 'Default' | 'Hover' | 'Active' | 'Filled' */) {

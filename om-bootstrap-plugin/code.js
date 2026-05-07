@@ -9460,7 +9460,7 @@ async function buildTabs2() {
   const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Tabs');
   if (_exist) _exist.remove();
   for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Tabs')) n.remove();
-  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Variant=(Bordered|Borderless|Filled),/.test(c.name))) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Variant=(Line|Square|Rounded|Bordered|Borderless|Filled),/.test(c.name))) n.remove();
   // Sweep any leftover Vertical variants from previous build
   for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Orientation=/.test(c.name))) n.remove();
 
@@ -9483,9 +9483,10 @@ async function buildTabs2() {
   const FIXED_W = 480;  // canvas width when Full Width = True (responsive consumer can resize)
 
   const SIZE_MAP = { Medium: 'Default', Large: 'Large' };
-  // Filled → Pill so Active tab text = brand/primary (orange) on a soft pill,
-  // Bordered/Borderless → Line so Active tab gets brand orange text + underline.
-  const STYLE_MAP = { Bordered: 'Line', Borderless: 'Line', Filled: 'Pill' };
+  // Line    → underline indicator (Tab Item Style=Line)
+  // Square  → soft peach square pill (Tab Item Style=Boxy)
+  // Rounded → fully rounded pill in a grey container (Tab Item Style=Pill)
+  const STYLE_MAP = { Line: 'Line', Square: 'Boxy', Rounded: 'Pill' };
 
   async function setTabLabel(inst, label) {
     const t = inst.findOne(n => n.type === 'TEXT');
@@ -9520,12 +9521,12 @@ async function buildTabs2() {
     const row = figma.createFrame();
     row.name = 'Tabs Row';
     row.layoutMode = 'HORIZONTAL';
-    row.itemSpacing = variant === 'Filled' ? 4 : 4;
+    row.itemSpacing = 4;
     row.counterAxisAlignItems = 'CENTER';
     row.primaryAxisAlignItems = 'MIN';
-    if (variant === 'Filled') {
+    if (variant === 'Rounded') {
       row.fills = [paintForVar(required['state/disabled-bg'])];
-      row.cornerRadius = 8;
+      row.cornerRadius = 999;
       row.paddingLeft = row.paddingRight = 4;
       row.paddingTop = row.paddingBottom = 4;
     } else {
@@ -9551,7 +9552,7 @@ async function buildTabs2() {
       await setTabLabel(inst, LABELS[i]);
     }
 
-    if (variant === 'Bordered') {
+    if (variant === 'Line') {
       const baseline = figma.createFrame();
       baseline.name = 'Baseline';
       baseline.fills = [paintForVar(required['border/default'])];
@@ -9568,7 +9569,7 @@ async function buildTabs2() {
   // --- Build all variants ----------------------------------------------------
   const allVariants = []; const meta = [];
   const SIZES    = ['Medium', 'Large'];
-  const VARIANTS = ['Bordered', 'Borderless', 'Filled'];
+  const VARIANTS = ['Line', 'Square', 'Rounded'];
   const FW       = [false, true];
 
   for (const sz of SIZES) for (const v of VARIANTS) for (const fw of FW) {

@@ -9638,6 +9638,294 @@ async function buildTabs2() {
 
 
 // =============================================================================
+// CALENDAR (atom) — base for Date / Range / Time / DateTime pickers
+// Two component sets:
+//   1. "Day Cell"  — State = Default | Hover | Today | Selected | In-Range
+//                    | Range-Start | Range-End | Disabled | Outside-Month   (9)
+//   2. "Calendar"  — Mode  = Default | Single Selected | Range              (3)
+// Calendar composes Day Cell instances. Sample month = May 2026 (matches
+// session date). Layout: Header row (prev / "May 2026" / next), Weekday row,
+// 6×7 day grid. Header + day cells use icon-button-style chevrons.
+// =============================================================================
+async function buildCalendar() {
+  console.log('[OM DS] buildCalendar started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || figma.currentPage;
+  await figma.setCurrentPageAsync(atomsPage);
+
+  // Idempotent cleanup
+  for (const name of ['Day Cell', 'Calendar']) {
+    const ex = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === name);
+    if (ex) ex.remove();
+    for (const n of atomsPage.children.filter(c => c.type === 'FRAME' && c.name === name)) n.remove();
+  }
+  for (const n of atomsPage.children.filter(c => c.type === 'COMPONENT' && /^State=(Default|Hover|Today|Selected|In-Range|Range-Start|Range-End|Disabled|Outside-Month)$/.test(c.name))) n.remove();
+  for (const n of atomsPage.children.filter(c => c.type === 'COMPONENT' && /^Mode=(Default|Single Selected|Range)$/.test(c.name))) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const chevL = await findIconComp(iconsPage, ['chevron-left', 'arrow-left', 'caret-left']);
+  const chevR = await findIconComp(iconsPage, ['chevron-right', 'arrow-right', 'caret-right']);
+
+  // ---------- 1. Day Cell component set --------------------------------------
+  const CELL_W = 36, CELL_H = 32;
+  const DAY_STATES = ['Default', 'Hover', 'Today', 'Selected', 'In-Range', 'Range-Start', 'Range-End', 'Disabled', 'Outside-Month'];
+
+  function dayPalette(state) {
+    switch (state) {
+      case 'Default':       return { bg: null,                         text: required['text/primary'],   radius: 6,   border: null };
+      case 'Hover':         return { bg: required['state/disabled-bg'], text: required['text/primary'],   radius: 6,   border: null };
+      case 'Today':         return { bg: null,                         text: required['brand/primary'],  radius: 6,   border: required['brand/primary'] };
+      case 'Selected':      return { bg: required['brand/primary'],     text: required['brand/on-primary'] || required['surface/card'], radius: 6, border: null };
+      case 'In-Range':      return { bg: required['brand/primary-subtle'] || required['brand/primary-muted'], text: required['brand/primary'], radius: 0, border: null };
+      case 'Range-Start':   return { bg: required['brand/primary'],     text: required['brand/on-primary'] || required['surface/card'], radius: 6, border: null, halfRight: true };
+      case 'Range-End':     return { bg: required['brand/primary'],     text: required['brand/on-primary'] || required['surface/card'], radius: 6, border: null, halfLeft: true };
+      case 'Disabled':      return { bg: null,                         text: required['state/disabled-text'], radius: 6, border: null };
+      case 'Outside-Month': return { bg: null,                         text: required['text/tertiary'],  radius: 6,   border: null };
+    }
+  }
+
+  async function makeDayCell(state, label) {
+    const pal = dayPalette(state);
+    const wrap = figma.createComponent();
+    wrap.name = `State=${state}`;
+    wrap.layoutMode = 'HORIZONTAL';
+    wrap.primaryAxisSizingMode = 'FIXED';
+    wrap.counterAxisSizingMode = 'FIXED';
+    wrap.primaryAxisAlignItems = 'CENTER';
+    wrap.counterAxisAlignItems = 'CENTER';
+    wrap.itemSpacing = 0;
+    wrap.paddingLeft = wrap.paddingRight = 0;
+    wrap.paddingTop = wrap.paddingBottom = 0;
+    wrap.fills = pal.bg ? [paintForVar(pal.bg)] : [];
+    if (pal.border) { wrap.strokes = [paintForVar(pal.border)]; wrap.strokeWeight = 1; wrap.strokeAlign = 'INSIDE'; }
+    wrap.cornerRadius = pal.radius;
+    if (pal.halfRight) { wrap.topLeftRadius = pal.radius; wrap.bottomLeftRadius = pal.radius; wrap.topRightRadius = 0; wrap.bottomRightRadius = 0; }
+    if (pal.halfLeft)  { wrap.topRightRadius = pal.radius; wrap.bottomRightRadius = pal.radius; wrap.topLeftRadius = 0; wrap.bottomLeftRadius = 0; }
+    wrap.resize(CELL_W, CELL_H);
+
+    const t = figma.createText();
+    const fStyle = styleByName['Body/Default'];
+    if (fStyle) await t.setTextStyleIdAsync(fStyle.id);
+    t.characters = String(label);
+    t.fills = [paintForVar(pal.text)];
+    t.textAutoResize = 'WIDTH_AND_HEIGHT';
+    wrap.appendChild(t);
+    return wrap;
+  }
+
+  const dayVariants = [];
+  for (let i = 0; i < DAY_STATES.length; i++) {
+    const lbl = (DAY_STATES[i] === 'Outside-Month') ? '30' : (DAY_STATES[i] === 'Today' ? '7' : (DAY_STATES[i] === 'Selected' ? '15' : '12'));
+    dayVariants.push(await makeDayCell(DAY_STATES[i], lbl));
+  }
+  const dayCellSet = figma.combineAsVariants(dayVariants, atomsPage);
+  dayCellSet.name = 'Day Cell';
+  dayCellSet.layoutMode = 'NONE';
+  dayCellSet.fills = [];
+  // Lay out Day Cell variants in a row
+  {
+    const PAD = 24, GAP = 16;
+    let x = PAD;
+    for (const v of dayVariants) { v.x = x; v.y = PAD; x += CELL_W + GAP; }
+    dayCellSet.resize(x - GAP + PAD, PAD * 2 + CELL_H);
+  }
+  autoPositionBelow(atomsPage, dayCellSet, 100);
+
+  // ---------- 2. Calendar component set --------------------------------------
+  // Sample month = May 2026 (May 1 = Friday). Grid (Sun-start):
+  // Row 1: 26 27 28 29 30 [1] [2]   (Apr / May)
+  // Row 2: [3..9]
+  // Row 3: [10..16]
+  // Row 4: [17..23]
+  // Row 5: [24..30]
+  // Row 6: [31] 1 2 3 4 5 6   (May / Jun)
+  const TODAY_DATE = 7, SELECTED_DATE = 15, RANGE_START = 10, RANGE_END = 17;
+  const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  const GRID = [
+    [{d:26,o:'prev'},{d:27,o:'prev'},{d:28,o:'prev'},{d:29,o:'prev'},{d:30,o:'prev'},{d:1,o:'cur'},{d:2,o:'cur'}],
+    [{d:3,o:'cur'},{d:4,o:'cur'},{d:5,o:'cur'},{d:6,o:'cur'},{d:7,o:'cur'},{d:8,o:'cur'},{d:9,o:'cur'}],
+    [{d:10,o:'cur'},{d:11,o:'cur'},{d:12,o:'cur'},{d:13,o:'cur'},{d:14,o:'cur'},{d:15,o:'cur'},{d:16,o:'cur'}],
+    [{d:17,o:'cur'},{d:18,o:'cur'},{d:19,o:'cur'},{d:20,o:'cur'},{d:21,o:'cur'},{d:22,o:'cur'},{d:23,o:'cur'}],
+    [{d:24,o:'cur'},{d:25,o:'cur'},{d:26,o:'cur'},{d:27,o:'cur'},{d:28,o:'cur'},{d:29,o:'cur'},{d:30,o:'cur'}],
+    [{d:31,o:'cur'},{d:1,o:'next'},{d:2,o:'next'},{d:3,o:'next'},{d:4,o:'next'},{d:5,o:'next'},{d:6,o:'next'}],
+  ];
+
+  function findDayVariant(state) {
+    return dayVariants.find(v => v.name === `State=${state}`) || dayVariants[0];
+  }
+
+  function stateFor(mode, cell) {
+    if (cell.o !== 'cur') return 'Outside-Month';
+    if (mode === 'Range') {
+      if (cell.d === RANGE_START) return 'Range-Start';
+      if (cell.d === RANGE_END)   return 'Range-End';
+      if (cell.d > RANGE_START && cell.d < RANGE_END) return 'In-Range';
+      if (cell.d === TODAY_DATE) return 'Today';
+      return 'Default';
+    }
+    if (mode === 'Single Selected' && cell.d === SELECTED_DATE) return 'Selected';
+    if (cell.d === TODAY_DATE) return 'Today';
+    return 'Default';
+  }
+
+  async function setDayLabel(inst, label) {
+    const t = inst.findOne(n => n.type === 'TEXT');
+    if (!t) return;
+    try { await figma.loadFontAsync(t.fontName); } catch (e) {}
+    try { t.characters = String(label); } catch (e) {}
+  }
+
+  async function makeCalendar(mode) {
+    const wrap = figma.createComponent();
+    wrap.name = `Mode=${mode}`;
+    wrap.layoutMode = 'VERTICAL';
+    wrap.primaryAxisSizingMode = 'AUTO';
+    wrap.counterAxisSizingMode = 'AUTO';
+    wrap.itemSpacing = 4;
+    wrap.paddingLeft = wrap.paddingRight = 12;
+    wrap.paddingTop = wrap.paddingBottom = 12;
+    wrap.fills = [paintForVar(required['surface/card'])];
+    wrap.strokes = [paintForVar(required['border/default'])];
+    wrap.strokeWeight = 1;
+    wrap.strokeAlign = 'INSIDE';
+    wrap.cornerRadius = 8;
+
+    // Header
+    const header = figma.createFrame();
+    header.name = 'Header';
+    header.layoutMode = 'HORIZONTAL';
+    header.primaryAxisSizingMode = 'FIXED';
+    header.counterAxisSizingMode = 'AUTO';
+    header.primaryAxisAlignItems = 'SPACE_BETWEEN';
+    header.counterAxisAlignItems = 'CENTER';
+    header.fills = [];
+    header.itemSpacing = 8;
+    header.paddingLeft = header.paddingRight = 4;
+    header.paddingTop = header.paddingBottom = 4;
+    wrap.appendChild(header);
+
+    if (chevL) {
+      const l = chevL.createInstance(); l.name = 'Prev';
+      resizeIconInstance(l, 16); bindIconColorForm(l, required['icon/default']);
+      header.appendChild(l);
+      try { l.layoutSizingHorizontal = 'FIXED'; l.layoutSizingVertical = 'FIXED'; } catch (e) {}
+    }
+    const monthText = figma.createText();
+    const hStyle = styleByName['Label/Default'] || styleByName['Body/Default'];
+    if (hStyle) await monthText.setTextStyleIdAsync(hStyle.id);
+    monthText.characters = 'May 2026';
+    monthText.fills = [paintForVar(required['text/primary'])];
+    monthText.textAutoResize = 'WIDTH_AND_HEIGHT';
+    header.appendChild(monthText);
+
+    if (chevR) {
+      const r = chevR.createInstance(); r.name = 'Next';
+      resizeIconInstance(r, 16); bindIconColorForm(r, required['icon/default']);
+      header.appendChild(r);
+      try { r.layoutSizingHorizontal = 'FIXED'; r.layoutSizingVertical = 'FIXED'; } catch (e) {}
+    }
+    try { header.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    // Weekday row
+    const wkRow = figma.createFrame();
+    wkRow.name = 'Weekdays';
+    wkRow.layoutMode = 'HORIZONTAL';
+    wkRow.primaryAxisSizingMode = 'AUTO';
+    wkRow.counterAxisSizingMode = 'AUTO';
+    wkRow.itemSpacing = 0;
+    wkRow.fills = [];
+    wrap.appendChild(wkRow);
+    for (const w of WEEKDAYS) {
+      const cell = figma.createFrame();
+      cell.layoutMode = 'HORIZONTAL';
+      cell.primaryAxisSizingMode = 'FIXED';
+      cell.counterAxisSizingMode = 'FIXED';
+      cell.primaryAxisAlignItems = 'CENTER';
+      cell.counterAxisAlignItems = 'CENTER';
+      cell.fills = [];
+      cell.resize(CELL_W, 24);
+      const t = figma.createText();
+      const sStyle = styleByName['Label/Default'] || styleByName['Body/Small'];
+      if (sStyle) await t.setTextStyleIdAsync(sStyle.id);
+      t.characters = w;
+      t.fills = [paintForVar(required['text/secondary'])];
+      t.textAutoResize = 'WIDTH_AND_HEIGHT';
+      cell.appendChild(t);
+      wkRow.appendChild(cell);
+    }
+
+    // Day grid
+    const grid = figma.createFrame();
+    grid.name = 'Day Grid';
+    grid.layoutMode = 'VERTICAL';
+    grid.primaryAxisSizingMode = 'AUTO';
+    grid.counterAxisSizingMode = 'AUTO';
+    grid.itemSpacing = 2;
+    grid.fills = [];
+    wrap.appendChild(grid);
+
+    for (const week of GRID) {
+      const row = figma.createFrame();
+      row.layoutMode = 'HORIZONTAL';
+      row.primaryAxisSizingMode = 'AUTO';
+      row.counterAxisSizingMode = 'AUTO';
+      row.itemSpacing = 0;
+      row.fills = [];
+      grid.appendChild(row);
+      for (const cellDef of week) {
+        const st = stateFor(mode, cellDef);
+        const variantNode = findDayVariant(st);
+        const inst = variantNode.createInstance();
+        inst.name = `${cellDef.d}`;
+        row.appendChild(inst);
+        await setDayLabel(inst, cellDef.d);
+      }
+    }
+    return wrap;
+  }
+
+  const MODES = ['Default', 'Single Selected', 'Range'];
+  const calVariants = [];
+  for (const m of MODES) calVariants.push(await makeCalendar(m));
+  const calSet = figma.combineAsVariants(calVariants, atomsPage);
+  calSet.name = 'Calendar'; calSet.layoutMode = 'NONE'; calSet.fills = [];
+
+  // Lay out Calendar variants in a row with section labels
+  const PAD_LEFT = 220, PAD_TOP = 160, PAD_RIGHT = 56, PAD_BOT = 56;
+  const COL_W = 320;
+  for (let i = 0; i < calVariants.length; i++) {
+    const v = calVariants[i];
+    v.x = Math.round(PAD_LEFT + i * COL_W + (COL_W - v.width) / 2);
+    v.y = PAD_TOP;
+  }
+  const maxH = Math.max(...calVariants.map(v => v.height));
+  calSet.resize(PAD_LEFT + MODES.length * COL_W + PAD_RIGHT, PAD_TOP + maxH + PAD_BOT);
+  autoPositionBelow(atomsPage, calSet, 120);
+
+  const colGroups = [{ name: 'Mode', x: PAD_LEFT, width: MODES.length * COL_W,
+    sizes: MODES.map((m, i) => ({ name: m, x: PAD_LEFT + i * COL_W, width: COL_W })) }];
+  const rowGroups = [{ name: 'Calendar', y: PAD_TOP, states: [{ name: '', y: PAD_TOP, height: maxH }] }];
+
+  await decorateComponentSet({
+    page: atomsPage, compSet: calSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Calendar', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Calendar built: Day Cell (${dayVariants.length}) + Calendar (${calVariants.length}).`);
+}
+
+
+// =============================================================================
 // DROPDOWN — Single + Multi-Chips + Multi-Inline merged
 //   Type: Single | Multi-Chips | Multi-Inline
 //   Size: Small | Default | Large
@@ -10063,6 +10351,8 @@ async function rebuildAll() {
       await buildAccordion();
     } else if (figma.command === 'buildTabs2') {
       await buildTabs2();
+    } else if (figma.command === 'buildCalendar') {
+      await buildCalendar();
     } else if (figma.command === 'cleanupFallbackIcons') {
       await cleanupFallbackIcons();
     } else {

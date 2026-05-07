@@ -2137,6 +2137,8 @@ const FALLBACK_GLYPHS = {
   'arrow-left':   '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 3.333L5.333 8 10 12.667M5.333 8h7.334" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   'check':        '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.333 8.333L6.667 11.667 12.667 5" stroke="#101F3E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   'minus':        '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.333 8h9.334" stroke="#101F3E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'search':       '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="7.333" cy="7.333" r="4.667" stroke="#101F3E" stroke-width="1.3"/><path d="M13.333 13.333l-2.667-2.667" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  'x':            '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4l8 8M12 4l-8 8" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round"/></svg>',
 };
 
 async function findOrCreateIconComponent(name, iconsPage, iconDefaultVar) {
@@ -6999,10 +7001,15 @@ async function buildDropdownMenu() {
     || miSet.children[0];
 
   const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
-  const searchIc = await findIconComp(iconsPage, ['search', 'magnifying-glass']);
-  const clearIc  = await findIconComp(iconsPage, ['x', 'close', 'cross', 'circle-x', 'remove', 'x-circle']);
-  const emptyIc  = await findIconComp(iconsPage, ['search', 'inbox', 'folder', 'file']);
-  const checkIc  = await findIconComp(iconsPage, ['check', 'tick', 'checkmark']);
+  const iconDefault = required['icon/default'] || required['text/primary'];
+  const searchIc = (await findIconComp(iconsPage, ['search', 'magnifying-glass']))
+                || (await findOrCreateIconComponent('search', iconsPage, iconDefault));
+  const clearIc  = (await findIconComp(iconsPage, ['x', 'close', 'cross', 'circle-x', 'remove', 'x-circle']))
+                || (await findOrCreateIconComponent('x', iconsPage, iconDefault));
+  const emptyIc  = (await findIconComp(iconsPage, ['inbox', 'folder', 'file', 'search']))
+                || (await findOrCreateIconComponent('search', iconsPage, iconDefault));
+  const checkIc  = (await findIconComp(iconsPage, ['check', 'tick', 'checkmark']))
+                || (await findOrCreateIconComponent('check', iconsPage, iconDefault));
   const checkOff = await findCheckboxComponent('Unchecked', 'Default');
 
   // ---- helpers (declared inside; capture required + styleByName) ----
@@ -7029,10 +7036,15 @@ async function buildDropdownMenu() {
       row.strokeWeight = 1;
       row.strokeAlign = 'INSIDE';
       // Round only top corners so it visually nests inside the menu's 8px radius
-      row.topLeftRadius = 7; row.topRightRadius = 7;
+      row.topLeftRadius = 8; row.topRightRadius = 8;
       row.bottomLeftRadius = 0; row.bottomRightRadius = 0;
     } else {
       row.strokeWeight = 0; row.strokeBottomWeight = 1; row.strokeAlign = 'INSIDE';
+      // Round top corners on the (unfocused) Hover/Filled rows too so background tint
+      // matches the menu's rounded top.
+      if (mode === 'Hover' || mode === 'Filled' || mode === 'Default') {
+        row.topLeftRadius = 8; row.topRightRadius = 8;
+      }
     }
     row.resize(240, h);
 
@@ -7181,7 +7193,11 @@ async function buildDropdownMenu() {
     comp.counterAxisAlignItems = 'MIN';
     comp.itemSpacing = 0;
     comp.paddingLeft = comp.paddingRight = 0;
-    comp.paddingTop = comp.paddingBottom = 4;
+    // If a search row is the first thing inside, drop top padding so the row's
+    // (rounded) top edge sits flush with the menu's rounded top corner.
+    const searchFirst = /^Search /.test(content) || content === 'Multi-Select Search' || content === 'No Results';
+    comp.paddingTop = searchFirst ? 0 : 4;
+    comp.paddingBottom = content === 'Footer' ? 0 : 4;
     comp.cornerRadius = 8;
     comp.fills = [paintForVar(required['surface/card'])];
     comp.strokes = [paintForVar(required['border/default'])];

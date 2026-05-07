@@ -7000,6 +7000,7 @@ async function buildDropdownMenu() {
 
   const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
   const searchIc = await findIconComp(iconsPage, ['search', 'magnifying-glass']);
+  const clearIc  = await findIconComp(iconsPage, ['x', 'close', 'cross', 'circle-x', 'remove', 'x-circle']);
   const emptyIc  = await findIconComp(iconsPage, ['search', 'inbox', 'folder', 'file']);
   const checkIc  = await findIconComp(iconsPage, ['check', 'tick', 'checkmark']);
   const checkOff = await findCheckboxComponent('Unchecked', 'Default');
@@ -7020,12 +7021,16 @@ async function buildDropdownMenu() {
     if (mode === 'Hover')       row.fills = [paintForVar(required['state/disabled-bg'] || required['surface/base'])];
     else if (mode === 'Active') row.fills = [paintForVar(required['surface/card'])];
     else                        row.fills = [];
-    // Bottom border (separator) + optional focus border for Active
+    // Border: Active gets full focus border w/ rounded top to match container; others = bottom separator only
     row.strokes = mode === 'Active'
       ? [paintForVar(required['brand/primary'])]
       : [paintForVar(required['border/default'])];
     if (mode === 'Active') {
-      row.strokeWeight = 1; row.strokeAlign = 'INSIDE';
+      row.strokeWeight = 1;
+      row.strokeAlign = 'INSIDE';
+      // Round only top corners so it visually nests inside the menu's 8px radius
+      row.topLeftRadius = 7; row.topRightRadius = 7;
+      row.bottomLeftRadius = 0; row.bottomRightRadius = 0;
     } else {
       row.strokeWeight = 0; row.strokeBottomWeight = 1; row.strokeAlign = 'INSIDE';
     }
@@ -7033,7 +7038,7 @@ async function buildDropdownMenu() {
 
     if (searchIc) {
       const ic = searchIc.createInstance();
-      ic.name = 'Icon';
+      ic.name = 'Search Icon';
       ic.resize(14, 14);
       bindIconColorForm(ic, mode === 'Active' || mode === 'Filled'
         ? (required['icon/default'] || required['text/primary'])
@@ -7054,17 +7059,27 @@ async function buildDropdownMenu() {
     }
     t.name = 'Placeholder';
     row.appendChild(t);
+    try { t.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    // Trailing clear X (only when Filled — user has typed)
+    if (mode === 'Filled' && clearIc) {
+      const x = clearIc.createInstance();
+      x.name = 'Clear';
+      x.resize(14, 14);
+      bindIconColorForm(x, required['icon/subtle'] || required['text/secondary']);
+      row.appendChild(x);
+    }
     return row;
   }
 
   function makeFooterRow(size) {
-    const padX = 12, h = size === 'Small' ? 32 : 36;
+    const padX = 12, h = size === 'Small' ? 34 : 38;
     const row = figma.createFrame();
     row.name = 'Footer';
     row.layoutMode = 'HORIZONTAL';
     row.primaryAxisSizingMode = 'FIXED';
     row.counterAxisSizingMode = 'FIXED';
-    row.primaryAxisAlignItems = 'MIN';
+    row.primaryAxisAlignItems = 'CENTER';
     row.counterAxisAlignItems = 'CENTER';
     row.itemSpacing = 6;
     row.paddingLeft = row.paddingRight = padX;
@@ -7126,18 +7141,18 @@ async function buildDropdownMenu() {
     f.name = 'No Results';
     f.layoutMode = 'VERTICAL';
     f.primaryAxisSizingMode = 'FIXED';
-    f.counterAxisSizingMode = 'FIXED';
+    f.counterAxisSizingMode = 'AUTO';
     f.primaryAxisAlignItems = 'CENTER';
     f.counterAxisAlignItems = 'CENTER';
-    f.itemSpacing = 6;
-    f.paddingTop = f.paddingBottom = 24;
-    f.paddingLeft = f.paddingRight = 16;
+    f.itemSpacing = 10;
+    f.paddingTop = f.paddingBottom = size === 'Small' ? 32 : 40;
+    f.paddingLeft = f.paddingRight = 24;
     f.fills = [];
-    f.resize(240, size === 'Small' ? 96 : 110);
+    f.resize(240, size === 'Small' ? 120 : 140);
     if (emptyIc) {
       const ic = emptyIc.createInstance();
       ic.name = 'Icon';
-      ic.resize(20, 20);
+      ic.resize(28, 28);
       bindIconColorForm(ic, required['text/tertiary'] || required['text/secondary']);
       f.appendChild(ic);
     }
@@ -7145,11 +7160,13 @@ async function buildDropdownMenu() {
     if (bodyStyle) title.setTextStyleIdAsync(bodyStyle.id);
     title.characters = 'No results found';
     title.fills = [paintForVar(required['text/primary'])];
+    title.textAlignHorizontal = 'CENTER';
     f.appendChild(title);
     const sub = figma.createText();
     if (smallStyle) sub.setTextStyleIdAsync(smallStyle.id);
     sub.characters = 'Try a different keyword';
     sub.fills = [paintForVar(required['text/secondary'])];
+    sub.textAlignHorizontal = 'CENTER';
     f.appendChild(sub);
     return f;
   }
@@ -7192,16 +7209,16 @@ async function buildDropdownMenu() {
     comp.appendChild(titleWrap);
     try { titleWrap.layoutSizingHorizontal = 'FILL'; titleWrap.layoutSizingVertical = 'HUG'; } catch (e) {}
 
-    // Search rows
-    const searchModes = { 'Search Default': 'Default', 'Search Hover': 'Hover', 'Search Active': 'Active', 'Search Filled': 'Filled', 'No Results': 'Default' };
+    // Search rows (also for Multi-Select Search)
+    const searchModes = { 'Search Default': 'Default', 'Search Hover': 'Hover', 'Search Active': 'Active', 'Search Filled': 'Filled', 'No Results': 'Default', 'Multi-Select Search': 'Filled' };
     if (searchModes[content]) {
       const row = makeSearchRow(size, searchModes[content]);
       comp.appendChild(row);
       try { row.layoutSizingHorizontal = 'FILL'; row.layoutSizingVertical = 'FIXED'; } catch (e) {}
     }
 
-    // Multi-Select: Select all header
-    if (content === 'Multi-Select') {
+    // Multi-Select: Select all header (also Multi-Select Search)
+    if (content === 'Multi-Select' || content === 'Multi-Select Search') {
       const sa = makeSelectAllRow(size);
       comp.appendChild(sa);
       try { sa.layoutSizingHorizontal = 'FILL'; sa.layoutSizingVertical = 'FIXED'; } catch (e) {}
@@ -7213,11 +7230,12 @@ async function buildDropdownMenu() {
       comp.appendChild(nr);
       try { nr.layoutSizingHorizontal = 'FILL'; nr.layoutSizingVertical = 'HUG'; } catch (e) {}
     } else {
-      // Items list — Multi-Select uses Multi type with mixed states (1st & 3rd selected)
-      const itemType = content === 'Multi-Select' ? 'Multi-Select' : 'Single';
+      // Items list — Multi types use Multi-Select item with mixed states (1st & 3rd selected)
+      const isMulti = content === 'Multi-Select' || content === 'Multi-Select Search';
+      const itemType = isMulti ? 'Multi-Select' : 'Single';
       const states = ['Default', 'Default', 'Default', 'Default'];
-      if (content === 'Items')        states[1] = 'Hover';
-      if (content === 'Multi-Select') { states[0] = 'Selected'; states[2] = 'Selected'; }
+      if (content === 'Items') states[1] = 'Hover';
+      if (isMulti) { states[0] = 'Selected'; states[2] = 'Selected'; }
       for (let i = 0; i < 4; i++) {
         const miComp = miBy(size, itemType, states[i]);
         if (!miComp) continue;
@@ -7239,7 +7257,7 @@ async function buildDropdownMenu() {
   }
 
   const SIZES   = ['Small', 'Default'];
-  const CONTENT = ['Items', 'Search Default', 'Search Hover', 'Search Active', 'Search Filled', 'No Results', 'Multi-Select', 'Footer'];
+  const CONTENT = ['Items', 'Search Default', 'Search Hover', 'Search Active', 'Search Filled', 'No Results', 'Multi-Select', 'Multi-Select Search', 'Footer'];
 
   const allVariants = [];
   const meta = [];

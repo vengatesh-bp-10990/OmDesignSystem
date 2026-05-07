@@ -12753,6 +12753,20 @@ const COMPONENT_TOKEN_SPECS = {
     'tabs/text/active':   'brand/primary',
     'tabs/indicator':     'brand/primary',
   },
+  'TopNavBar': {
+    'surface':            'surface/card',
+    'border/bottom':      'border/default',
+    'brand/text':         'text/primary',
+    'brand/dot':          'brand/primary',
+    'workspace/text':     'text/primary',
+    'workspace/icon':     'icon/default',
+    'divider':            'border/default',
+    'icon/default':       'icon/default',
+    'icon/hover':         'text/primary',
+    'badge/bg':           'status/danger',
+    'badge/text':         'brand/on-primary',
+    'avatar/ring':        'border/default',
+  },
 };
 
 async function buildComponentTokens() {
@@ -13104,6 +13118,324 @@ async function buildPageHeader() {
 }
 
 // =============================================================================
+// TOP NAV BAR (Organism) — Phase 5
+// Web-app top nav bar, height 56 (Default) / 48 (Compact). Width 1280.
+// Composes: brand cluster (logo + dot icon), optional workspace switcher
+// (Dropdown), centered SearchBar, right-side IconButtons (notifications + help)
+// + Avatar.
+// Variants: Layout = Default | With-Workspace | Minimal (3 rows)
+//           Density = Default | Compact (2 cols)
+// = 6 variants. Decorate via shared template.
+// =============================================================================
+async function buildTopNavBar() {
+  console.log('[OM DS] buildTopNavBar started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens('TopNavBar');
+
+  const tnCol = (await figma.variables.getLocalVariableCollectionsAsync())
+    .find(c => c.name === 'Component/TopNavBar');
+  const tnVars = {};
+  if (tnCol) {
+    const all = await figma.variables.getLocalVariablesAsync('COLOR');
+    for (const v of all) {
+      if (v.variableCollectionId === tnCol.id) tnVars[v.name] = v;
+    }
+  }
+  const FALLBACK = {
+    'surface': 'surface/card', 'border/bottom': 'border/default',
+    'brand/text': 'text/primary', 'brand/dot': 'brand/primary',
+    'workspace/text': 'text/primary', 'workspace/icon': 'icon/default',
+    'divider': 'border/default',
+    'icon/default': 'icon/default', 'icon/hover': 'text/primary',
+    'badge/bg': 'status/danger', 'badge/text': 'brand/on-primary',
+    'avatar/ring': 'border/default',
+  };
+  const tn = (n) => tnVars[n] || required[FALLBACK[n] || 'text/primary'];
+
+  const organismsPage = figma.root.children.find(p => p.name.includes('Organisms')) || figma.currentPage;
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'));
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms'));
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  await figma.setCurrentPageAsync(organismsPage);
+
+  // Idempotency
+  const _exist = organismsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Top Nav Bar');
+  if (_exist) _exist.remove();
+  for (const n of organismsPage.children.filter(c => c.type === 'FRAME' && c.name === 'Top Nav Bar')) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+
+  // Locate dependency components
+  const iconBtnSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'IconButton');
+  const avatarSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Avatar');
+  const searchBarSet = moleculesPage && moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && (n.name === 'Search Bar' || n.name === 'SearchBar'));
+  const dropdownSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Dropdown');
+
+  function findIconBtn(size) {
+    if (!iconBtnSet) return null;
+    return iconBtnSet.children.find(c => c.name === `Variant=Ghost, Size=${size}, State=Default`)
+        || iconBtnSet.children.find(c => /Variant=Ghost/.test(c.name) && new RegExp(`Size=${size}`).test(c.name))
+        || iconBtnSet.children[0];
+  }
+  function findAvatar(size) {
+    if (!avatarSet) return null;
+    // Match common naming patterns; fall back to first
+    return avatarSet.children.find(c => new RegExp(`Size=${size}`).test(c.name) && /Type=Image|Variant=Single/.test(c.name))
+        || avatarSet.children.find(c => new RegExp(`Size=${size}`).test(c.name))
+        || avatarSet.children[0];
+  }
+  function findSearchBar() {
+    if (!searchBarSet) return null;
+    return searchBarSet.children.find(c => /Size=Default/.test(c.name) && /State=Default/.test(c.name) && /Content=Empty/.test(c.name))
+        || searchBarSet.children[0];
+  }
+  function findDropdown() {
+    if (!dropdownSet) return null;
+    return dropdownSet.children.find(c => /Type=Single/.test(c.name) && /Size=Small/.test(c.name) && /State=Default/.test(c.name) && /Status=None/.test(c.name) && /Content=Filled/.test(c.name))
+        || dropdownSet.children.find(c => /Size=Small/.test(c.name)) || dropdownSet.children[0];
+  }
+  async function setText(node, txt) {
+    const t = node.findOne(n => n.type === 'TEXT');
+    if (!t) return;
+    try { await figma.loadFontAsync(t.fontName); } catch (e) {}
+    try { t.characters = txt; } catch (e) {}
+  }
+
+  const WIDTH = 1280;
+
+  async function buildVariant(layout, density) {
+    const isCompact = density === 'Compact';
+    const showWorkspace = layout === 'With-Workspace';
+    const isMinimal = layout === 'Minimal';
+
+    const H = isCompact ? 48 : 56;
+    const padX = isCompact ? 16 : 24;
+    const iconSize = isCompact ? 'Small' : 'Default';
+    const avatarSize = isCompact ? 'Small' : 'Medium';
+
+    const comp = figma.createComponent();
+    comp.name = `Layout=${layout}, Density=${density}`;
+    comp.layoutMode = 'HORIZONTAL';
+    comp.primaryAxisSizingMode = 'FIXED';
+    comp.counterAxisSizingMode = 'FIXED';
+    comp.primaryAxisAlignItems = 'SPACE_BETWEEN';
+    comp.counterAxisAlignItems = 'CENTER';
+    comp.itemSpacing = 16;
+    comp.paddingLeft = comp.paddingRight = padX;
+    comp.paddingTop = comp.paddingBottom = 0;
+    comp.fills = [paintForVar(tn('surface'))];
+    comp.strokes = [paintForVar(tn('border/bottom'))];
+    comp.strokeWeight = 1;
+    comp.strokeAlign = 'INSIDE';
+    comp.strokeBottomWeight = 1;
+    comp.strokeTopWeight = 0;
+    comp.strokeLeftWeight = 0;
+    comp.strokeRightWeight = 0;
+    comp.resize(WIDTH, H);
+
+    // ---- Left cluster: brand + optional workspace -------------------------
+    const left = figma.createFrame();
+    left.name = 'Left';
+    left.layoutMode = 'HORIZONTAL';
+    left.primaryAxisSizingMode = 'AUTO';
+    left.counterAxisSizingMode = 'AUTO';
+    left.counterAxisAlignItems = 'CENTER';
+    left.itemSpacing = 16;
+    left.fills = [];
+    comp.appendChild(left);
+
+    // Brand cluster (dot + wordmark)
+    const brand = figma.createFrame();
+    brand.name = 'Brand';
+    brand.layoutMode = 'HORIZONTAL';
+    brand.primaryAxisSizingMode = 'AUTO';
+    brand.counterAxisSizingMode = 'AUTO';
+    brand.counterAxisAlignItems = 'CENTER';
+    brand.itemSpacing = 8;
+    brand.fills = [];
+    left.appendChild(brand);
+
+    const dot = figma.createEllipse();
+    dot.resize(isCompact ? 16 : 20, isCompact ? 16 : 20);
+    dot.fills = [paintForVar(tn('brand/dot'))];
+    brand.appendChild(dot);
+
+    const wordmark = figma.createText();
+    const ws = styleByName['Heading/H5'];
+    if (ws) await wordmark.setTextStyleIdAsync(ws.id);
+    wordmark.characters = 'OM';
+    wordmark.fills = [paintForVar(tn('brand/text'))];
+    brand.appendChild(wordmark);
+
+    // Optional workspace switcher (small dropdown)
+    if (showWorkspace) {
+      const dv = findDropdown();
+      if (dv) {
+        const di = dv.createInstance();
+        left.appendChild(di);
+        try { di.resize(180, di.height); } catch (e) {}
+      } else {
+        // Fallback text-only switcher
+        const ws2 = figma.createText();
+        const wss = styleByName['Body/Default'];
+        if (wss) await ws2.setTextStyleIdAsync(wss.id);
+        ws2.characters = 'Workspace ▾';
+        ws2.fills = [paintForVar(tn('workspace/text'))];
+        left.appendChild(ws2);
+      }
+    }
+
+    // ---- Center: SearchBar (omitted in Minimal) ---------------------------
+    if (!isMinimal) {
+      const center = figma.createFrame();
+      center.name = 'Center';
+      center.layoutMode = 'HORIZONTAL';
+      center.primaryAxisSizingMode = 'AUTO';
+      center.counterAxisSizingMode = 'AUTO';
+      center.counterAxisAlignItems = 'CENTER';
+      center.primaryAxisAlignItems = 'CENTER';
+      center.fills = [];
+      comp.appendChild(center);
+      const sb = findSearchBar();
+      if (sb) {
+        const sbI = sb.createInstance();
+        center.appendChild(sbI);
+        try { sbI.resize(isCompact ? 320 : 480, sbI.height); } catch (e) {}
+      }
+    }
+
+    // ---- Right cluster: notifications + help + divider + avatar ----------
+    const right = figma.createFrame();
+    right.name = 'Right';
+    right.layoutMode = 'HORIZONTAL';
+    right.primaryAxisSizingMode = 'AUTO';
+    right.counterAxisSizingMode = 'AUTO';
+    right.counterAxisAlignItems = 'CENTER';
+    right.itemSpacing = 8;
+    right.fills = [];
+    comp.appendChild(right);
+
+    const ibV = findIconBtn(iconSize);
+    if (ibV) {
+      // Notifications (with badge dot overlay)
+      const notif = ibV.createInstance();
+      right.appendChild(notif);
+      // Badge dot
+      const badge = figma.createEllipse();
+      badge.resize(8, 8);
+      badge.fills = [paintForVar(tn('badge/bg'))];
+      badge.strokes = [paintForVar(tn('surface'))];
+      badge.strokeWeight = 1.5;
+      // Position relative to the notif icon button: top-right corner
+      notif.parent.appendChild(badge);
+      badge.x = notif.x + notif.width - 6;
+      badge.y = notif.y + 2;
+
+      // Help
+      const help = ibV.createInstance();
+      right.appendChild(help);
+    }
+
+    // Divider
+    const divider = figma.createRectangle();
+    divider.resize(1, isCompact ? 24 : 28);
+    divider.fills = [paintForVar(tn('divider'))];
+    right.appendChild(divider);
+
+    // Avatar
+    const avV = findAvatar(avatarSize);
+    if (avV) {
+      const av = avV.createInstance();
+      right.appendChild(av);
+    }
+
+    return comp;
+  }
+
+  // ---- Build matrix --------------------------------------------------------
+  const LAYOUTS = ['Default', 'With-Workspace', 'Minimal'];
+  const DENSITIES = ['Default', 'Compact'];
+
+  const variants = [];
+  const grid = {};
+  for (const layout of LAYOUTS) {
+    grid[layout] = {};
+    for (const density of DENSITIES) {
+      const v = await buildVariant(layout, density);
+      variants.push(v);
+      grid[layout][density] = v;
+    }
+  }
+
+  const compSet = figma.combineAsVariants(variants, organismsPage);
+  compSet.name = 'Top Nav Bar';
+  compSet.layoutMode = 'NONE';
+  compSet.fills = [paintForVar(tn('surface'))];
+  compSet.strokes = [paintForVar(tn('border/bottom'))];
+  compSet.strokeWeight = 1;
+  compSet.cornerRadius = 16;
+
+  const PAD_TOP = 100;
+  const PAD_LEFT = 200;
+  const PAD_RIGHT = 40;
+  const PAD_BOT = 40;
+  const COL_GAP = 48;
+  const ROW_GAP = 48;
+
+  const colW = {};
+  for (const d of DENSITIES) {
+    let maxW = 0;
+    for (const l of LAYOUTS) if (grid[l][d].width > maxW) maxW = grid[l][d].width;
+    colW[d] = maxW;
+  }
+  const colX = {};
+  let cx = PAD_LEFT;
+  for (const d of DENSITIES) { colX[d] = cx; cx += colW[d] + COL_GAP; }
+
+  const rowH = {};
+  for (const l of LAYOUTS) {
+    let maxH = 0;
+    for (const d of DENSITIES) if (grid[l][d].height > maxH) maxH = grid[l][d].height;
+    rowH[l] = maxH;
+  }
+  const rowY = {};
+  let cy = PAD_TOP;
+  for (const l of LAYOUTS) { rowY[l] = cy; cy += rowH[l] + ROW_GAP; }
+
+  for (const l of LAYOUTS) for (const d of DENSITIES) {
+    const v = grid[l][d];
+    v.x = colX[d];
+    v.y = rowY[l];
+  }
+  compSet.resize(cx - COL_GAP + PAD_RIGHT, cy - ROW_GAP + PAD_BOT);
+  autoPositionBelow(organismsPage, compSet, 120);
+
+  const colGroups = [{
+    name: 'Density', x: PAD_LEFT, width: cx - COL_GAP - PAD_LEFT,
+    sizes: DENSITIES.map(d => ({ name: d, x: colX[d], width: colW[d] })),
+  }];
+  const rowGroups = LAYOUTS.map(l => ({
+    name: l, y: rowY[l],
+    states: [{ name: '', y: rowY[l], height: rowH[l] }],
+  }));
+  await decorateComponentSet({
+    page: organismsPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Top Nav Bar',
+    surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
+  console.log(`[OM DS] Top Nav Bar variants built: ${variants.length}`);
+  figma.notify(`✅ Top Nav Bar: ${variants.length} variants (Layout × Density).`);
+}
+
+// =============================================================================
 // BUILD ALL WIRED — single command that:
 //   1. Ensures all Component/{Name} collections + aliases exist.
 //   2. Rebuilds every component in dependency order so layers bind directly to
@@ -13160,6 +13492,7 @@ async function buildAllWired() {
     { name: 'Sidebar',         fn: typeof buildSidebar         === 'function' ? buildSidebar         : null },
     { name: 'EmptyState',      fn: typeof buildEmptyState      === 'function' ? buildEmptyState      : null },
     { name: 'PageHeader',      fn: typeof buildPageHeader      === 'function' ? buildPageHeader      : null },
+    { name: 'TopNavBar',       fn: typeof buildTopNavBar       === 'function' ? buildTopNavBar       : null },
   ];
 
   const ok = []; const failed = [];
@@ -13273,6 +13606,8 @@ async function buildAllWired() {
       await buildEmptyState();
     } else if (figma.command === 'buildPageHeader') {
       await buildPageHeader();
+    } else if (figma.command === 'buildTopNavBar') {
+      await buildTopNavBar();
     } else if (figma.command === 'cleanupFallbackIcons') {
       await cleanupFallbackIcons();
     } else {

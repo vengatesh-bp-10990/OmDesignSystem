@@ -2142,6 +2142,11 @@ const FALLBACK_GLYPHS = {
   'filter':       '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.667 4h10.666M4.667 8h6.666M6.667 12h2.666" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round"/></svg>',
   'chevron-right':'<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 4l4 4-4 4" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   'home':         '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.667 7.333L8 2.667l5.333 4.666V13a.667.667 0 01-.667.667H3.333A.667.667 0 012.667 13V7.333z" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'info':            '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="#101F3E" stroke-width="1.3"/><path d="M8 7.333v3.334M8 5.333v.001" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  'check-circle':    '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="#101F3E" stroke-width="1.3"/><path d="M5.667 8.333l1.666 1.667L10.333 6.667" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'alert-circle':    '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="#101F3E" stroke-width="1.3"/><path d="M8 5.333v3.334M8 10.667v.001" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  'alert-triangle':  '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 2.667L14 13.333H2L8 2.667z" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 6.667v3.333M8 12v.001" stroke="#101F3E" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  'star':            '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 1.667l1.96 3.97 4.373.636-3.166 3.087.748 4.357L8 11.667l-3.915 2.05.748-4.357L1.667 6.273l4.373-.636L8 1.667z" stroke="#101F3E" stroke-width="1.3" stroke-linejoin="round"/></svg>',
 };
 
 async function findOrCreateIconComponent(name, iconsPage, iconDefaultVar) {
@@ -5458,6 +5463,17 @@ async function resolveFormTokens() {
     'status/warning-text':    anyBy('status/warning-text') || anyBy('status/warning'),
     'status/warning-border':  anyBy('status/warning-border') || anyBy('status/warning'),
     'status/warning-subtle':  anyBy('status/warning-subtle'),
+    'status/info':            anyBy('status/info'),
+    'status/info-text':       anyBy('status/info-text') || anyBy('status/info'),
+    'status/info-border':     anyBy('status/info-border') || anyBy('status/info'),
+    'status/info-subtle':     anyBy('status/info-subtle'),
+    'status/danger-muted':    anyBy('status/danger-muted'),
+    'status/success-muted':   anyBy('status/success-muted'),
+    'status/warning-muted':   anyBy('status/warning-muted'),
+    'status/info-muted':      anyBy('status/info-muted'),
+    'icon/disabled':          anyBy('icon/disabled'),
+    'brand/on-primary':       thBy && thBy('brand/on-primary'),
+    'brand/primary-hover':    anyBy('brand/primary-hover') || anyBy('brand/primary'),
   };
   // text/tertiary may not exist; fall back to text/secondary
   if (!required['text/tertiary']) required['text/tertiary'] = required['text/secondary'];
@@ -7738,6 +7754,1311 @@ async function buildBreadcrumb() {
 
 
 // =============================================================================
+// Shared molecule helpers
+// =============================================================================
+
+// Find a built atom variant by name on Atoms page (fallback util used by molecules)
+async function findAtomVariant(setName, predicate) {
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms'));
+  if (!atomsPage) return null;
+  const set = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === setName);
+  if (!set) return null;
+  const found = set.children.find(predicate);
+  return found || set.defaultVariant || set.children[0];
+}
+
+// Status helpers (used by Alert, Toast, Progress)
+function statusTokens(required, status) {
+  // status: 'Info' | 'Success' | 'Warning' | 'Danger' | 'Neutral'
+  if (status === 'Success') return { color: required['status/success'], text: required['status/success-text'], border: required['status/success-border'], subtle: required['status/success-subtle'], muted: required['status/success-muted'] };
+  if (status === 'Warning') return { color: required['status/warning'], text: required['status/warning-text'], border: required['status/warning-border'], subtle: required['status/warning-subtle'], muted: required['status/warning-muted'] };
+  if (status === 'Danger')  return { color: required['status/danger'],  text: required['status/danger-text'],  border: required['status/danger-border'],  subtle: required['status/danger-subtle'],  muted: required['status/danger-muted'] };
+  if (status === 'Info')    return { color: required['status/info'],    text: required['status/info-text'],    border: required['status/info-border'],    subtle: required['status/info-subtle'],    muted: required['status/info-muted'] };
+  // Neutral
+  return { color: required['text/secondary'], text: required['text/primary'], border: required['border/default'], subtle: required['state/disabled-bg'], muted: required['state/disabled-bg'] };
+}
+
+// Status → preferred icon name (for Alert / Toast)
+function statusIconName(status) {
+  if (status === 'Success') return 'check-circle';
+  if (status === 'Warning') return 'alert-triangle';
+  if (status === 'Danger')  return 'alert-circle';
+  if (status === 'Info')    return 'info';
+  return 'info';
+}
+
+// Position a comp set below the highest existing element on the given page
+function autoPositionBelow(page, compSet, gap) {
+  let maxBottom = 0;
+  for (const node of page.children) {
+    if (node === compSet) continue;
+    if (node.type !== 'COMPONENT_SET' && node.type !== 'COMPONENT' && node.type !== 'FRAME') continue;
+    if ('y' in node && 'height' in node) { const b = node.y + node.height; if (b > maxBottom) maxBottom = b; }
+  }
+  compSet.x = 0;
+  compSet.y = maxBottom > 0 ? Math.round(maxBottom + (gap || 120)) : 0;
+}
+
+
+// =============================================================================
+// TABS (Molecule) — single Tab Item component (compose bars from instances)
+//   Style: Line | Boxy | Pill
+//   State: Default | Hover | Active | Disabled
+//   Size:  Small (32h) | Default (40h)
+//   Bools: Has Leading Icon, Has Trailing Badge
+// =============================================================================
+async function buildTabs() {
+  console.log('[OM DS] buildTabs started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
+                     || figma.root.children.find(p => p.name.includes('Atoms'))
+                     || figma.currentPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Tab Item');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Tab Item')) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Style=(Line|Boxy|Pill), Size=(Small|Default), State=/.test(c.name))) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const iconDefault = required['icon/default'];
+  const leadIc = await findIconComp(iconsPage, ['home', 'star', 'circle']) || await findOrCreateIconComponent('home', iconsPage, iconDefault);
+
+  // Try to find Badge component (atom). If absent, fall back to a small dot frame.
+  const badgeSet = (await (async () => {
+    try { await figma.loadAllPagesAsync(); } catch (e) {}
+    const atomsPage = figma.root.children.find(p => p.name.includes('Atoms'));
+    return atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Badge');
+  })());
+  function findBadgeVariant() {
+    if (!badgeSet) return null;
+    return badgeSet.children.find(c => /Variant=Subtle/i.test(c.name) && /Color=Primary/i.test(c.name) && /Size=Small/i.test(c.name))
+        || badgeSet.children.find(c => /Variant=Subtle/i.test(c.name) && /Color=Primary/i.test(c.name))
+        || badgeSet.defaultVariant
+        || badgeSet.children[0];
+  }
+
+  const SIZE_SPECS = {
+    Small:   { h: 32, padX: 12, padY: 6,  font: 'Body/Small',   icon: 14, gap: 6,  radius: 6  },
+    Default: { h: 40, padX: 16, padY: 10, font: 'Body/Default', icon: 16, gap: 8,  radius: 8  },
+  };
+
+  function pickColors(style, state) {
+    if (state === 'Disabled') return { bg: null, text: required['state/disabled-text'], border: null, indicator: null };
+    if (style === 'Line') {
+      const text =
+        state === 'Active' ? required['brand/primary'] :
+        state === 'Hover'  ? required['text/primary'] :
+                              required['text/secondary'];
+      return { bg: null, text, border: null, indicator: state === 'Active' ? required['brand/primary'] : null };
+    }
+    if (style === 'Boxy') {
+      const bg =
+        state === 'Active' ? required['surface/card'] :
+        state === 'Hover'  ? required['state/disabled-bg'] :
+                              null;
+      const text = state === 'Active' ? required['text/primary'] : required['text/secondary'];
+      return { bg, text, border: state === 'Active' ? required['border/default'] : null, indicator: null };
+    }
+    // Pill
+    const bg =
+      state === 'Active' ? required['brand/primary'] :
+      state === 'Hover'  ? required['brand/primary-subtle'] :
+                            null;
+    const text =
+      state === 'Active' ? (required['brand/on-primary'] || required['surface/card']) :
+      state === 'Hover'  ? required['brand/primary'] :
+                            required['text/secondary'];
+    return { bg, text, border: null, indicator: null };
+  }
+
+  async function makeVariant(style, size, state) {
+    const spec = SIZE_SPECS[size];
+    const colors = pickColors(style, state);
+
+    const wrap = figma.createComponent();
+    wrap.name = `Style=${style}, Size=${size}, State=${state}`;
+    wrap.layoutMode = 'VERTICAL';
+    wrap.primaryAxisSizingMode = 'AUTO';
+    wrap.counterAxisSizingMode = 'AUTO';
+    wrap.itemSpacing = 0;
+    wrap.fills = [];
+
+    // Inner row (icon + text + badge)
+    const row = figma.createFrame();
+    row.name = 'Tab';
+    row.layoutMode = 'HORIZONTAL';
+    row.primaryAxisSizingMode = 'AUTO';
+    row.counterAxisSizingMode = 'FIXED';
+    row.counterAxisAlignItems = 'CENTER';
+    row.itemSpacing = spec.gap;
+    row.paddingLeft = row.paddingRight = spec.padX;
+    row.paddingTop = row.paddingBottom = spec.padY;
+    row.fills = colors.bg ? [paintForVar(colors.bg)] : [];
+    if (colors.border) { row.strokes = [paintForVar(colors.border)]; row.strokeWeight = 1; row.strokeAlign = 'INSIDE'; }
+    row.cornerRadius = style === 'Pill' ? spec.h : (style === 'Boxy' ? spec.radius : 0);
+    row.resize(row.width, spec.h);
+    wrap.appendChild(row);
+    try { row.layoutSizingHorizontal = 'HUG'; row.layoutSizingVertical = 'FIXED'; } catch (e) {}
+
+    // Leading icon
+    const ic = leadIc.createInstance();
+    ic.name = 'Leading Icon';
+    ic.resize(spec.icon, spec.icon);
+    bindIconColorForm(ic, colors.text);
+    row.appendChild(ic);
+    try { ic.layoutSizingHorizontal = 'FIXED'; ic.layoutSizingVertical = 'FIXED'; } catch (e) {}
+
+    // Label
+    const label = figma.createText();
+    const fStyle = styleByName[spec.font];
+    if (fStyle) await label.setTextStyleIdAsync(fStyle.id);
+    label.characters = 'Tab label';
+    label.fills = [paintForVar(colors.text)];
+    label.textAutoResize = 'WIDTH_AND_HEIGHT';
+    row.appendChild(label);
+
+    // Trailing badge instance (or fallback dot)
+    let badgeNode = null;
+    const bv = findBadgeVariant();
+    if (bv) {
+      const inst = bv.createInstance();
+      inst.name = 'Badge';
+      row.appendChild(inst);
+      try { inst.layoutSizingHorizontal = 'HUG'; inst.layoutSizingVertical = 'HUG'; } catch (e) {}
+      badgeNode = inst;
+    } else {
+      const dot = figma.createFrame();
+      dot.name = 'Badge';
+      dot.resize(8, 8); dot.cornerRadius = 4;
+      dot.fills = [paintForVar(required['brand/primary'])];
+      row.appendChild(dot);
+      badgeNode = dot;
+    }
+    badgeNode.visible = false;
+
+    // Line-style underline indicator (sits below row)
+    if (style === 'Line') {
+      const indicator = figma.createFrame();
+      indicator.name = 'Indicator';
+      indicator.layoutMode = 'NONE';
+      indicator.fills = colors.indicator ? [paintForVar(colors.indicator)] : [];
+      indicator.resize(row.width, 2);
+      wrap.appendChild(indicator);
+      try { indicator.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    }
+
+    return { comp: wrap, ic, badgeNode };
+  }
+
+  const STYLES = ['Line', 'Boxy', 'Pill'];
+  const SIZES  = ['Small', 'Default'];
+  const STATES = ['Default', 'Hover', 'Active', 'Disabled'];
+
+  const allVariants = []; const variantMeta = []; const icons = []; const badges = [];
+  for (const style of STYLES) for (const size of SIZES) for (const state of STATES) {
+    const r = await makeVariant(style, size, state);
+    allVariants.push(r.comp); variantMeta.push({ style, size, state }); icons.push(r.ic); badges.push(r.badgeNode);
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Tab Item'; compSet.layoutMode = 'NONE'; compSet.fills = [];
+
+  const propIds = {};
+  try { propIds.icon  = compSet.addComponentProperty('Has Leading Icon', 'BOOLEAN', false); } catch (e) {}
+  try { propIds.badge = compSet.addComponentProperty('Has Badge',        'BOOLEAN', false); } catch (e) {}
+  if (propIds.icon)  for (const n of icons)  try { n.componentPropertyReferences = { visible: propIds.icon };  } catch (e) {}
+  if (propIds.badge) for (const n of badges) try { n.componentPropertyReferences = { visible: propIds.badge }; } catch (e) {}
+
+  // Layout: cols = State (4), rows = Style × Size (3 × 2 = 6)
+  const PAD_LEFT = 220, PAD_TOP = 160, PAD_RIGHT = 56, PAD_BOT = 56;
+  const COL_W = 240, ROW_H = 80, GROUP_GAP = 32;
+  const colGroups = [{ name: 'State', x: PAD_LEFT, width: COL_W * STATES.length,
+    sizes: STATES.map((s, i) => ({ name: s, x: PAD_LEFT + i * COL_W, width: COL_W })) }];
+  const rowGroups = [];
+  let cy = PAD_TOP;
+  for (const style of STYLES) {
+    const states = SIZES.map((sz, i) => ({ name: sz, y: cy + i * ROW_H, height: ROW_H }));
+    rowGroups.push({ name: style, y: cy, states });
+    cy += SIZES.length * ROW_H + GROUP_GAP;
+  }
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i]; const m = variantMeta[i];
+    const colIdx = STATES.indexOf(m.state);
+    const rg = rowGroups.find(r => r.name === m.style);
+    const st = rg.states.find(s => s.name === m.size);
+    v.x = Math.round(PAD_LEFT + colIdx * COL_W + (COL_W - v.width) / 2);
+    v.y = Math.round(st.y + (ROW_H - v.height) / 2);
+  }
+  compSet.resize(PAD_LEFT + STATES.length * COL_W + PAD_RIGHT, cy + PAD_BOT);
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Tab Item', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Tab Item built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
+// PAGINATION (Molecule) — composed bar (prev / page numbers / next)
+//   Style: Numbered | Prev-Next | Compact (just X of Y text + arrows)
+//   Size:  Small | Default
+// =============================================================================
+async function buildPagination() {
+  console.log('[OM DS] buildPagination started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
+                     || figma.root.children.find(p => p.name.includes('Atoms'))
+                     || figma.currentPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Pagination');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Pagination')) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Style=(Numbered|Prev-Next|Compact), Size=(Small|Default)$/.test(c.name))) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const iconDefault = required['icon/default'];
+  const prevIc = await findIconComp(iconsPage, ['chevron-left', 'arrow-left']) || await findOrCreateIconComponent('arrow-left', iconsPage, iconDefault);
+  const nextIc = await findIconComp(iconsPage, ['chevron-right', 'arrow-right']) || await findOrCreateIconComponent('chevron-right', iconsPage, iconDefault);
+
+  const SIZE_SPECS = {
+    Small:   { btn: 28, font: 'Body/Small',   icon: 14, gap: 4, radius: 6 },
+    Default: { btn: 36, font: 'Body/Default', icon: 16, gap: 6, radius: 8 },
+  };
+
+  async function makePageBtn(spec, label, isActive, isIcon) {
+    const b = figma.createFrame();
+    b.name = isIcon ? `Btn-${label}` : `Page-${label}`;
+    b.layoutMode = 'HORIZONTAL';
+    b.primaryAxisSizingMode = 'FIXED';
+    b.counterAxisSizingMode = 'FIXED';
+    b.primaryAxisAlignItems = 'CENTER';
+    b.counterAxisAlignItems = 'CENTER';
+    b.cornerRadius = spec.radius;
+    b.fills = isActive ? [paintForVar(required['brand/primary'])] : [];
+    b.strokes = isActive ? [] : [paintForVar(required['border/default'])];
+    if (!isActive) { b.strokeWeight = 1; b.strokeAlign = 'INSIDE'; }
+    b.resize(spec.btn, spec.btn);
+    if (isIcon) {
+      const which = label === 'prev' ? prevIc : nextIc;
+      const ic = which.createInstance();
+      ic.resize(spec.icon, spec.icon);
+      bindIconColorForm(ic, required['text/secondary']);
+      b.appendChild(ic);
+      try { ic.layoutSizingHorizontal = 'FIXED'; ic.layoutSizingVertical = 'FIXED'; } catch (e) {}
+    } else {
+      const t = figma.createText();
+      const fStyle = styleByName[spec.font];
+      if (fStyle) await t.setTextStyleIdAsync(fStyle.id);
+      t.characters = label;
+      t.fills = [paintForVar(isActive ? (required['brand/on-primary'] || required['surface/card']) : required['text/primary'])];
+      t.textAutoResize = 'WIDTH_AND_HEIGHT';
+      b.appendChild(t);
+    }
+    return b;
+  }
+
+  async function makeVariant(style, size) {
+    const spec = SIZE_SPECS[size];
+    const comp = figma.createComponent();
+    comp.name = `Style=${style}, Size=${size}`;
+    comp.layoutMode = 'HORIZONTAL';
+    comp.primaryAxisSizingMode = 'AUTO';
+    comp.counterAxisSizingMode = 'AUTO';
+    comp.counterAxisAlignItems = 'CENTER';
+    comp.itemSpacing = spec.gap;
+    comp.paddingLeft = comp.paddingRight = comp.paddingTop = comp.paddingBottom = 0;
+    comp.fills = [];
+
+    const prev = await makePageBtn(spec, 'prev', false, true);
+    comp.appendChild(prev);
+
+    if (style === 'Numbered') {
+      const pages = ['1', '2', '3', '…', '8'];
+      for (let i = 0; i < pages.length; i++) {
+        const b = await makePageBtn(spec, pages[i], i === 1, false);
+        comp.appendChild(b);
+      }
+    } else if (style === 'Compact') {
+      const t = figma.createText();
+      const fStyle = styleByName[spec.font];
+      if (fStyle) await t.setTextStyleIdAsync(fStyle.id);
+      t.characters = 'Page 2 of 8';
+      t.fills = [paintForVar(required['text/secondary'])];
+      t.textAutoResize = 'WIDTH_AND_HEIGHT';
+      comp.appendChild(t);
+    } else {
+      // Prev-Next: just the two arrows + label
+      const t = figma.createText();
+      const fStyle = styleByName[spec.font];
+      if (fStyle) await t.setTextStyleIdAsync(fStyle.id);
+      t.characters = '2 / 8';
+      t.fills = [paintForVar(required['text/primary'])];
+      t.textAutoResize = 'WIDTH_AND_HEIGHT';
+      comp.appendChild(t);
+    }
+
+    const next = await makePageBtn(spec, 'next', false, true);
+    comp.appendChild(next);
+    return { comp };
+  }
+
+  const STYLES = ['Numbered', 'Prev-Next', 'Compact'];
+  const SIZES  = ['Small', 'Default'];
+  const allVariants = []; const variantMeta = [];
+  for (const style of STYLES) for (const size of SIZES) {
+    const r = await makeVariant(style, size);
+    allVariants.push(r.comp); variantMeta.push({ style, size });
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Pagination'; compSet.layoutMode = 'NONE'; compSet.fills = [];
+
+  const PAD_LEFT = 220, PAD_TOP = 160, PAD_RIGHT = 56, PAD_BOT = 56;
+  const COL_W = 380, ROW_H = 80;
+  const colGroups = [{ name: 'Size', x: PAD_LEFT, width: COL_W * SIZES.length,
+    sizes: SIZES.map((s, i) => ({ name: s, x: PAD_LEFT + i * COL_W, width: COL_W })) }];
+  const rowGroups = STYLES.map((style, i) => ({ name: style, y: PAD_TOP + i * ROW_H, states: [{ name: '', y: PAD_TOP + i * ROW_H, height: ROW_H }] }));
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i]; const m = variantMeta[i];
+    const colIdx = SIZES.indexOf(m.size);
+    const rowIdx = STYLES.indexOf(m.style);
+    v.x = Math.round(PAD_LEFT + colIdx * COL_W + 16);
+    v.y = Math.round(PAD_TOP + rowIdx * ROW_H + (ROW_H - v.height) / 2);
+  }
+  compSet.resize(PAD_LEFT + SIZES.length * COL_W + PAD_RIGHT, PAD_TOP + STYLES.length * ROW_H + PAD_BOT);
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Pagination', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Pagination built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
+// CARD (Molecule) — content container with optional header/footer
+//   Style:   Default (filled card) | Outlined (no shadow) | Elevated (shadow)
+//   Padding: Compact (16) | Comfortable (24)
+//   Bools:   Has Header, Has Footer, Has Image
+// =============================================================================
+async function buildCard() {
+  console.log('[OM DS] buildCard started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
+                     || figma.root.children.find(p => p.name.includes('Atoms'))
+                     || figma.currentPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Card');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Card')) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Style=(Default|Outlined|Elevated), Padding=/.test(c.name))) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+
+  function elevatedShadow() {
+    return [
+      { type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.06 }, offset: { x: 0, y: 1 }, radius: 2,  spread: 0, visible: true, blendMode: 'NORMAL' },
+      { type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.08 }, offset: { x: 0, y: 6 }, radius: 18, spread: 0, visible: true, blendMode: 'NORMAL' },
+    ];
+  }
+
+  async function makeVariant(style, padding) {
+    const pad = padding === 'Compact' ? 16 : 24;
+    const W = 320;
+    const comp = figma.createComponent();
+    comp.name = `Style=${style}, Padding=${padding}`;
+    comp.layoutMode = 'VERTICAL';
+    comp.primaryAxisSizingMode = 'AUTO';
+    comp.counterAxisSizingMode = 'FIXED';
+    comp.itemSpacing = 0;
+    comp.paddingLeft = comp.paddingRight = comp.paddingTop = comp.paddingBottom = 0;
+    comp.cornerRadius = 12;
+    comp.clipsContent = true;
+    comp.fills = [paintForVar(required['surface/card'])];
+    if (style === 'Outlined' || style === 'Default') {
+      comp.strokes = [paintForVar(required['border/default'])]; comp.strokeWeight = 1; comp.strokeAlign = 'INSIDE';
+    }
+    if (style === 'Elevated') comp.effects = elevatedShadow();
+    comp.resize(W, comp.height);
+
+    // Image placeholder (top, hidden by default)
+    const image = figma.createFrame();
+    image.name = 'Image';
+    image.layoutMode = 'NONE';
+    image.fills = [paintForVar(required['state/disabled-bg'])];
+    image.resize(W, 140);
+    comp.appendChild(image);
+    try { image.layoutSizingHorizontal = 'FILL'; image.layoutSizingVertical = 'FIXED'; } catch (e) {}
+    image.visible = false;
+
+    // Header
+    const header = figma.createFrame();
+    header.name = 'Header';
+    header.layoutMode = 'VERTICAL';
+    header.primaryAxisSizingMode = 'AUTO';
+    header.counterAxisSizingMode = 'FIXED';
+    header.itemSpacing = 4;
+    header.paddingLeft = header.paddingRight = pad;
+    header.paddingTop = pad; header.paddingBottom = 8;
+    header.fills = [];
+    header.resize(W, 0);
+    comp.appendChild(header);
+    try { header.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    const title = figma.createText();
+    if (styleByName['Heading/H4']) await title.setTextStyleIdAsync(styleByName['Heading/H4'].id);
+    title.characters = 'Card title';
+    title.fills = [paintForVar(required['text/primary'])];
+    title.textAutoResize = 'WIDTH_AND_HEIGHT';
+    header.appendChild(title);
+    try { title.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    const subtitle = figma.createText();
+    if (styleByName['Body/Small']) await subtitle.setTextStyleIdAsync(styleByName['Body/Small'].id);
+    subtitle.characters = 'Subtitle or description';
+    subtitle.fills = [paintForVar(required['text/secondary'])];
+    subtitle.textAutoResize = 'WIDTH_AND_HEIGHT';
+    header.appendChild(subtitle);
+    try { subtitle.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    // Body
+    const body = figma.createFrame();
+    body.name = 'Body';
+    body.layoutMode = 'VERTICAL';
+    body.primaryAxisSizingMode = 'AUTO';
+    body.counterAxisSizingMode = 'FIXED';
+    body.itemSpacing = 8;
+    body.paddingLeft = body.paddingRight = pad;
+    body.paddingTop = body.paddingBottom = pad;
+    body.fills = [];
+    comp.appendChild(body);
+    try { body.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    const bodyText = figma.createText();
+    if (styleByName['Body/Default']) await bodyText.setTextStyleIdAsync(styleByName['Body/Default'].id);
+    bodyText.characters = 'Card body content goes here. Replace with your own text, images, or any other content slot.';
+    bodyText.fills = [paintForVar(required['text/primary'])];
+    bodyText.textAutoResize = 'HEIGHT';
+    body.appendChild(bodyText);
+    try { bodyText.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    // Footer
+    const footer = figma.createFrame();
+    footer.name = 'Footer';
+    footer.layoutMode = 'HORIZONTAL';
+    footer.primaryAxisSizingMode = 'FIXED';
+    footer.counterAxisSizingMode = 'AUTO';
+    footer.primaryAxisAlignItems = 'SPACE_BETWEEN';
+    footer.counterAxisAlignItems = 'CENTER';
+    footer.paddingLeft = footer.paddingRight = pad;
+    footer.paddingTop = 8; footer.paddingBottom = pad;
+    footer.fills = [];
+    footer.resize(W, 0);
+    comp.appendChild(footer);
+    try { footer.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    const meta = figma.createText();
+    if (styleByName['Body/Small']) await meta.setTextStyleIdAsync(styleByName['Body/Small'].id);
+    meta.characters = 'Updated 2 hr ago';
+    meta.fills = [paintForVar(required['text/secondary'])];
+    meta.textAutoResize = 'WIDTH_AND_HEIGHT';
+    footer.appendChild(meta);
+    const action = figma.createText();
+    if (styleByName['Body/Small']) await action.setTextStyleIdAsync(styleByName['Body/Small'].id);
+    action.characters = 'View →';
+    action.fills = [paintForVar(required['brand/primary'])];
+    action.textAutoResize = 'WIDTH_AND_HEIGHT';
+    footer.appendChild(action);
+    footer.visible = false;
+
+    return { comp, header, footer, image };
+  }
+
+  const STYLES = ['Default', 'Outlined', 'Elevated'];
+  const PADS   = ['Compact', 'Comfortable'];
+  const allVariants = []; const variantMeta = []; const headers = []; const footers = []; const images = [];
+  for (const style of STYLES) for (const pad of PADS) {
+    const r = await makeVariant(style, pad);
+    allVariants.push(r.comp); variantMeta.push({ style, pad });
+    headers.push(r.header); footers.push(r.footer); images.push(r.image);
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Card'; compSet.layoutMode = 'NONE'; compSet.fills = [];
+
+  const propIds = {};
+  try { propIds.header = compSet.addComponentProperty('Has Header', 'BOOLEAN', true);  } catch (e) {}
+  try { propIds.footer = compSet.addComponentProperty('Has Footer', 'BOOLEAN', false); } catch (e) {}
+  try { propIds.image  = compSet.addComponentProperty('Has Image',  'BOOLEAN', false); } catch (e) {}
+  if (propIds.header) for (const n of headers) try { n.componentPropertyReferences = { visible: propIds.header }; } catch (e) {}
+  if (propIds.footer) for (const n of footers) try { n.componentPropertyReferences = { visible: propIds.footer }; } catch (e) {}
+  if (propIds.image)  for (const n of images)  try { n.componentPropertyReferences = { visible: propIds.image  }; } catch (e) {}
+
+  // Layout: cols = Padding (2), rows = Style (3)
+  const PAD_LEFT = 220, PAD_TOP = 160, PAD_RIGHT = 56, PAD_BOT = 56;
+  const COL_W = 400, ROW_H = 280;
+  const colGroups = [{ name: 'Padding', x: PAD_LEFT, width: COL_W * PADS.length,
+    sizes: PADS.map((p, i) => ({ name: p, x: PAD_LEFT + i * COL_W, width: COL_W })) }];
+  const rowGroups = STYLES.map((s, i) => ({ name: s, y: PAD_TOP + i * ROW_H, states: [{ name: '', y: PAD_TOP + i * ROW_H, height: ROW_H }] }));
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i]; const m = variantMeta[i];
+    const colIdx = PADS.indexOf(m.pad);
+    const rowIdx = STYLES.indexOf(m.style);
+    v.x = Math.round(PAD_LEFT + colIdx * COL_W + (COL_W - v.width) / 2);
+    v.y = Math.round(PAD_TOP + rowIdx * ROW_H + (ROW_H - v.height) / 2);
+  }
+  compSet.resize(PAD_LEFT + PADS.length * COL_W + PAD_RIGHT, PAD_TOP + STYLES.length * ROW_H + PAD_BOT);
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Card', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Card built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
+// ALERT (Molecule) — inline contextual message
+//   Status: Info | Success | Warning | Danger | Neutral
+//   Style:  Subtle (tinted bg) | Solid (status bg + on-color text) | Outlined
+//   Bools:  Has Title, Has Description, Has Action, Has Close
+// =============================================================================
+async function buildAlert() {
+  console.log('[OM DS] buildAlert started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
+                     || figma.root.children.find(p => p.name.includes('Atoms'))
+                     || figma.currentPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Alert');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Alert')) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Status=.*Style=(Subtle|Solid|Outlined)$/.test(c.name))) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const iconDefault = required['icon/default'];
+  const closeIc = await findIconComp(iconsPage, ['x', 'close']) || await findOrCreateIconComponent('x', iconsPage, iconDefault);
+
+  async function makeVariant(status, style) {
+    const tok = statusTokens(required, status);
+    const isSolid = style === 'Solid';
+    const onColor = isSolid ? (required['brand/on-primary'] || required['surface/card']) : tok.text;
+    const bg     = isSolid ? tok.color : (style === 'Subtle' ? tok.subtle : null);
+    const border = isSolid ? null      : (style === 'Outlined' ? tok.border : tok.border);
+
+    const comp = figma.createComponent();
+    comp.name = `Status=${status}, Style=${style}`;
+    comp.layoutMode = 'HORIZONTAL';
+    comp.primaryAxisSizingMode = 'FIXED';
+    comp.counterAxisSizingMode = 'AUTO';
+    comp.itemSpacing = 12;
+    comp.paddingLeft = comp.paddingRight = 16;
+    comp.paddingTop = comp.paddingBottom = 12;
+    comp.cornerRadius = 8;
+    comp.fills = bg ? [paintForVar(bg)] : [];
+    if (border) { comp.strokes = [paintForVar(border)]; comp.strokeWeight = 1; comp.strokeAlign = 'INSIDE'; }
+    comp.resize(420, comp.height);
+
+    // Leading status icon
+    const iconName = statusIconName(status);
+    let ic = await findIconComp(iconsPage, [iconName, 'info-circle', 'info']);
+    if (!ic) ic = await findOrCreateIconComponent('info', iconsPage, iconDefault);
+    const icInst = ic.createInstance();
+    icInst.name = 'Status Icon';
+    icInst.resize(20, 20);
+    bindIconColorForm(icInst, onColor);
+    comp.appendChild(icInst);
+    try { icInst.layoutSizingHorizontal = 'FIXED'; icInst.layoutSizingVertical = 'FIXED'; } catch (e) {}
+
+    // Body column
+    const body = figma.createFrame();
+    body.name = 'Body';
+    body.layoutMode = 'VERTICAL';
+    body.primaryAxisSizingMode = 'AUTO';
+    body.counterAxisSizingMode = 'FIXED';
+    body.itemSpacing = 4;
+    body.fills = [];
+    comp.appendChild(body);
+    try { body.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    const title = figma.createText();
+    if (styleByName['Body/Default']) await title.setTextStyleIdAsync(styleByName['Body/Default'].id);
+    title.characters = `${status} alert title`;
+    title.fills = [paintForVar(onColor)];
+    title.textAutoResize = 'HEIGHT';
+    body.appendChild(title);
+    try { title.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    const desc = figma.createText();
+    if (styleByName['Body/Small']) await desc.setTextStyleIdAsync(styleByName['Body/Small'].id);
+    desc.characters = 'Optional description that explains the alert in more detail.';
+    desc.fills = [paintForVar(isSolid ? onColor : required['text/secondary'])];
+    desc.textAutoResize = 'HEIGHT';
+    body.appendChild(desc);
+    try { desc.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    const action = figma.createText();
+    if (styleByName['Body/Small']) await action.setTextStyleIdAsync(styleByName['Body/Small'].id);
+    action.characters = 'View details →';
+    action.fills = [paintForVar(isSolid ? onColor : tok.text)];
+    action.textAutoResize = 'HEIGHT';
+    body.appendChild(action);
+    action.visible = false;
+
+    // Close button
+    const close = closeIc.createInstance();
+    close.name = 'Close';
+    close.resize(16, 16);
+    bindIconColorForm(close, onColor);
+    comp.appendChild(close);
+    try { close.layoutSizingHorizontal = 'FIXED'; close.layoutSizingVertical = 'FIXED'; } catch (e) {}
+    close.visible = false;
+
+    return { comp, title, desc, action, close };
+  }
+
+  const STATUSES = ['Info', 'Success', 'Warning', 'Danger', 'Neutral'];
+  const STYLES   = ['Subtle', 'Solid', 'Outlined'];
+  const allVariants = []; const variantMeta = [];
+  const titles = [], descs = [], actions = [], closes = [];
+  for (const status of STATUSES) for (const style of STYLES) {
+    const r = await makeVariant(status, style);
+    allVariants.push(r.comp); variantMeta.push({ status, style });
+    titles.push(r.title); descs.push(r.desc); actions.push(r.action); closes.push(r.close);
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Alert'; compSet.layoutMode = 'NONE'; compSet.fills = [];
+
+  const propIds = {};
+  try { propIds.title  = compSet.addComponentProperty('Has Title',       'BOOLEAN', true);  } catch (e) {}
+  try { propIds.desc   = compSet.addComponentProperty('Has Description', 'BOOLEAN', true);  } catch (e) {}
+  try { propIds.action = compSet.addComponentProperty('Has Action',      'BOOLEAN', false); } catch (e) {}
+  try { propIds.close  = compSet.addComponentProperty('Has Close',       'BOOLEAN', false); } catch (e) {}
+  if (propIds.title)  for (const n of titles)  try { n.componentPropertyReferences = { visible: propIds.title  }; } catch (e) {}
+  if (propIds.desc)   for (const n of descs)   try { n.componentPropertyReferences = { visible: propIds.desc   }; } catch (e) {}
+  if (propIds.action) for (const n of actions) try { n.componentPropertyReferences = { visible: propIds.action }; } catch (e) {}
+  if (propIds.close)  for (const n of closes)  try { n.componentPropertyReferences = { visible: propIds.close  }; } catch (e) {}
+
+  // Layout: cols = Style (3), rows = Status (5)
+  const PAD_LEFT = 220, PAD_TOP = 160, PAD_RIGHT = 56, PAD_BOT = 56;
+  const COL_W = 480, ROW_H = 130;
+  const colGroups = [{ name: 'Style', x: PAD_LEFT, width: COL_W * STYLES.length,
+    sizes: STYLES.map((s, i) => ({ name: s, x: PAD_LEFT + i * COL_W, width: COL_W })) }];
+  const rowGroups = STATUSES.map((st, i) => ({ name: st, y: PAD_TOP + i * ROW_H, states: [{ name: '', y: PAD_TOP + i * ROW_H, height: ROW_H }] }));
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i]; const m = variantMeta[i];
+    const colIdx = STYLES.indexOf(m.style);
+    const rowIdx = STATUSES.indexOf(m.status);
+    v.x = Math.round(PAD_LEFT + colIdx * COL_W + (COL_W - v.width) / 2);
+    v.y = Math.round(PAD_TOP + rowIdx * ROW_H + (ROW_H - v.height) / 2);
+  }
+  compSet.resize(PAD_LEFT + STYLES.length * COL_W + PAD_RIGHT, PAD_TOP + STATUSES.length * ROW_H + PAD_BOT);
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Alert', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Alert built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
+// TOAST (Molecule) — floating notification with shadow
+//   Status: Info | Success | Warning | Danger
+//   Layout: Compact | With Action
+//   Bools:  Has Description, Has Close (default true)
+// =============================================================================
+async function buildToast() {
+  console.log('[OM DS] buildToast started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
+                     || figma.root.children.find(p => p.name.includes('Atoms'))
+                     || figma.currentPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Toast');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Toast')) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Status=.*Layout=(Compact|With Action)$/.test(c.name))) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const iconDefault = required['icon/default'];
+  const closeIc = await findIconComp(iconsPage, ['x', 'close']) || await findOrCreateIconComponent('x', iconsPage, iconDefault);
+
+  function popoverShadow() {
+    return [
+      { type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.10 }, offset: { x: 0, y: 4 },  radius: 8,  spread: 0, visible: true, blendMode: 'NORMAL' },
+      { type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.12 }, offset: { x: 0, y: 12 }, radius: 32, spread: 0, visible: true, blendMode: 'NORMAL' },
+    ];
+  }
+
+  async function makeVariant(status, layout) {
+    const tok = statusTokens(required, status);
+
+    const comp = figma.createComponent();
+    comp.name = `Status=${status}, Layout=${layout}`;
+    comp.layoutMode = 'HORIZONTAL';
+    comp.primaryAxisSizingMode = 'FIXED';
+    comp.counterAxisSizingMode = 'AUTO';
+    comp.counterAxisAlignItems = 'CENTER';
+    comp.itemSpacing = 12;
+    comp.paddingLeft = comp.paddingRight = 14;
+    comp.paddingTop = comp.paddingBottom = 12;
+    comp.cornerRadius = 8;
+    comp.fills = [paintForVar(required['surface/card'])];
+    comp.strokes = [paintForVar(required['border/default'])]; comp.strokeWeight = 1; comp.strokeAlign = 'INSIDE';
+    comp.effects = popoverShadow();
+    comp.resize(380, comp.height);
+
+    // Status accent stripe (left)
+    const stripe = figma.createFrame();
+    stripe.name = 'Accent';
+    stripe.fills = [paintForVar(tok.color)];
+    stripe.cornerRadius = 2;
+    stripe.resize(3, 32);
+    comp.appendChild(stripe);
+    try { stripe.layoutSizingHorizontal = 'FIXED'; stripe.layoutSizingVertical = 'FILL'; } catch (e) {}
+
+    // Status icon
+    const iconName = statusIconName(status);
+    let ic = await findIconComp(iconsPage, [iconName, 'info-circle', 'info']);
+    if (!ic) ic = await findOrCreateIconComponent('info', iconsPage, iconDefault);
+    const icInst = ic.createInstance();
+    icInst.name = 'Status Icon';
+    icInst.resize(18, 18);
+    bindIconColorForm(icInst, tok.color);
+    comp.appendChild(icInst);
+    try { icInst.layoutSizingHorizontal = 'FIXED'; icInst.layoutSizingVertical = 'FIXED'; } catch (e) {}
+
+    // Body
+    const body = figma.createFrame();
+    body.name = 'Body';
+    body.layoutMode = 'VERTICAL';
+    body.primaryAxisSizingMode = 'AUTO';
+    body.counterAxisSizingMode = 'FIXED';
+    body.itemSpacing = 2;
+    body.fills = [];
+    comp.appendChild(body);
+    try { body.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    const title = figma.createText();
+    if (styleByName['Body/Default']) await title.setTextStyleIdAsync(styleByName['Body/Default'].id);
+    title.characters = `${status} message title`;
+    title.fills = [paintForVar(required['text/primary'])];
+    title.textAutoResize = 'HEIGHT';
+    body.appendChild(title);
+    try { title.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    const desc = figma.createText();
+    if (styleByName['Body/Small']) await desc.setTextStyleIdAsync(styleByName['Body/Small'].id);
+    desc.characters = 'Short supporting line for the toast.';
+    desc.fills = [paintForVar(required['text/secondary'])];
+    desc.textAutoResize = 'HEIGHT';
+    body.appendChild(desc);
+    try { desc.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    if (layout === 'With Action') {
+      const action = figma.createText();
+      if (styleByName['Body/Small']) await action.setTextStyleIdAsync(styleByName['Body/Small'].id);
+      action.characters = 'Undo';
+      action.fills = [paintForVar(tok.text)];
+      action.textAutoResize = 'WIDTH_AND_HEIGHT';
+      comp.appendChild(action);
+    }
+
+    // Close
+    const close = closeIc.createInstance();
+    close.name = 'Close';
+    close.resize(16, 16);
+    bindIconColorForm(close, required['text/secondary']);
+    comp.appendChild(close);
+    try { close.layoutSizingHorizontal = 'FIXED'; close.layoutSizingVertical = 'FIXED'; } catch (e) {}
+
+    return { comp, desc, close };
+  }
+
+  const STATUSES = ['Info', 'Success', 'Warning', 'Danger'];
+  const LAYOUTS  = ['Compact', 'With Action'];
+  const allVariants = []; const variantMeta = [];
+  const descs = [], closes = [];
+  for (const status of STATUSES) for (const layout of LAYOUTS) {
+    const r = await makeVariant(status, layout);
+    allVariants.push(r.comp); variantMeta.push({ status, layout });
+    descs.push(r.desc); closes.push(r.close);
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Toast'; compSet.layoutMode = 'NONE'; compSet.fills = [];
+
+  const propIds = {};
+  try { propIds.desc  = compSet.addComponentProperty('Has Description', 'BOOLEAN', true); } catch (e) {}
+  try { propIds.close = compSet.addComponentProperty('Has Close',       'BOOLEAN', true); } catch (e) {}
+  if (propIds.desc)  for (const n of descs)  try { n.componentPropertyReferences = { visible: propIds.desc  }; } catch (e) {}
+  if (propIds.close) for (const n of closes) try { n.componentPropertyReferences = { visible: propIds.close }; } catch (e) {}
+
+  // Layout: cols = Layout (2), rows = Status (4)
+  const PAD_LEFT = 220, PAD_TOP = 160, PAD_RIGHT = 56, PAD_BOT = 56;
+  const COL_W = 460, ROW_H = 110;
+  const colGroups = [{ name: 'Layout', x: PAD_LEFT, width: COL_W * LAYOUTS.length,
+    sizes: LAYOUTS.map((l, i) => ({ name: l, x: PAD_LEFT + i * COL_W, width: COL_W })) }];
+  const rowGroups = STATUSES.map((st, i) => ({ name: st, y: PAD_TOP + i * ROW_H, states: [{ name: '', y: PAD_TOP + i * ROW_H, height: ROW_H }] }));
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i]; const m = variantMeta[i];
+    const colIdx = LAYOUTS.indexOf(m.layout);
+    const rowIdx = STATUSES.indexOf(m.status);
+    v.x = Math.round(PAD_LEFT + colIdx * COL_W + (COL_W - v.width) / 2);
+    v.y = Math.round(PAD_TOP + rowIdx * ROW_H + (ROW_H - v.height) / 2);
+  }
+  compSet.resize(PAD_LEFT + LAYOUTS.length * COL_W + PAD_RIGHT, PAD_TOP + STATUSES.length * ROW_H + PAD_BOT);
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Toast', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Toast built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
+// PROGRESS (Molecule) — Linear bar
+//   Type:  Linear (only — Circular reuses Spinner)
+//   Size:  Small (4h) | Default (8h) | Large (12h)
+//   Color: Brand | Success | Warning | Danger
+// =============================================================================
+async function buildProgress() {
+  console.log('[OM DS] buildProgress started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
+                     || figma.root.children.find(p => p.name.includes('Atoms'))
+                     || figma.currentPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Progress');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Progress')) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Size=(Small|Default|Large), Color=/.test(c.name))) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+
+  const SIZE_H = { Small: 4, Default: 8, Large: 12 };
+  function colorVar(c) {
+    if (c === 'Success') return required['status/success'];
+    if (c === 'Warning') return required['status/warning'];
+    if (c === 'Danger')  return required['status/danger'];
+    return required['brand/primary'];
+  }
+
+  function makeVariant(size, color) {
+    const W = 280;
+    const h = SIZE_H[size];
+    const comp = figma.createComponent();
+    comp.name = `Size=${size}, Color=${color}`;
+    comp.layoutMode = 'VERTICAL';
+    comp.primaryAxisSizingMode = 'AUTO';
+    comp.counterAxisSizingMode = 'FIXED';
+    comp.itemSpacing = 6;
+    comp.fills = [];
+    comp.resize(W, comp.height);
+
+    // Track
+    const track = figma.createFrame();
+    track.name = 'Track';
+    track.layoutMode = 'NONE';
+    track.fills = [paintForVar(required['state/disabled-bg'])];
+    track.cornerRadius = h / 2;
+    track.clipsContent = true;
+    track.resize(W, h);
+    comp.appendChild(track);
+    try { track.layoutSizingHorizontal = 'FILL'; track.layoutSizingVertical = 'FIXED'; } catch (e) {}
+
+    // Bar (60% determinate)
+    const bar = figma.createFrame();
+    bar.name = 'Bar';
+    bar.fills = [paintForVar(colorVar(color))];
+    bar.cornerRadius = h / 2;
+    bar.resize(Math.round(W * 0.6), h);
+    track.appendChild(bar);
+    bar.x = 0; bar.y = 0;
+
+    return { comp };
+  }
+
+  const SIZES  = ['Small', 'Default', 'Large'];
+  const COLORS = ['Brand', 'Success', 'Warning', 'Danger'];
+  const allVariants = []; const variantMeta = [];
+  for (const size of SIZES) for (const color of COLORS) {
+    const r = makeVariant(size, color);
+    allVariants.push(r.comp); variantMeta.push({ size, color });
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Progress'; compSet.layoutMode = 'NONE'; compSet.fills = [];
+
+  const PAD_LEFT = 220, PAD_TOP = 160, PAD_RIGHT = 56, PAD_BOT = 56;
+  const COL_W = 360, ROW_H = 60;
+  const colGroups = [{ name: 'Color', x: PAD_LEFT, width: COL_W * COLORS.length,
+    sizes: COLORS.map((c, i) => ({ name: c, x: PAD_LEFT + i * COL_W, width: COL_W })) }];
+  const rowGroups = SIZES.map((s, i) => ({ name: s, y: PAD_TOP + i * ROW_H, states: [{ name: '', y: PAD_TOP + i * ROW_H, height: ROW_H }] }));
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i]; const m = variantMeta[i];
+    const colIdx = COLORS.indexOf(m.color);
+    const rowIdx = SIZES.indexOf(m.size);
+    v.x = Math.round(PAD_LEFT + colIdx * COL_W + (COL_W - v.width) / 2);
+    v.y = Math.round(PAD_TOP + rowIdx * ROW_H + (ROW_H - v.height) / 2);
+  }
+  compSet.resize(PAD_LEFT + COLORS.length * COL_W + PAD_RIGHT, PAD_TOP + SIZES.length * ROW_H + PAD_BOT);
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Progress', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Progress built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
+// SKELETON (Molecule) — loading placeholders
+//   Type: Text Line | Text Block | Avatar Circle | Avatar Square | Image | Card
+// =============================================================================
+async function buildSkeleton() {
+  console.log('[OM DS] buildSkeleton started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
+                     || figma.root.children.find(p => p.name.includes('Atoms'))
+                     || figma.currentPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Skeleton');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Skeleton')) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Type=(Text Line|Text Block|Avatar Circle|Avatar Square|Image|Card)$/.test(c.name))) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+
+  const skel = required['state/disabled-bg'];
+
+  function bar(w, h, radius) {
+    const f = figma.createFrame();
+    f.fills = [paintForVar(skel)];
+    f.cornerRadius = radius != null ? radius : 4;
+    f.resize(w, h);
+    return f;
+  }
+
+  function makeVariant(type) {
+    const comp = figma.createComponent();
+    comp.name = `Type=${type}`;
+    comp.layoutMode = 'VERTICAL';
+    comp.primaryAxisSizingMode = 'AUTO';
+    comp.counterAxisSizingMode = 'AUTO';
+    comp.itemSpacing = 8;
+    comp.fills = [];
+
+    if (type === 'Text Line') {
+      const b = bar(240, 12, 4); comp.appendChild(b);
+    } else if (type === 'Text Block') {
+      [240, 200, 160].forEach(w => comp.appendChild(bar(w, 12, 4)));
+    } else if (type === 'Avatar Circle') {
+      const a = bar(40, 40, 20); comp.appendChild(a);
+    } else if (type === 'Avatar Square') {
+      const a = bar(40, 40, 6); comp.appendChild(a);
+    } else if (type === 'Image') {
+      const i = bar(280, 160, 8); comp.appendChild(i);
+    } else if (type === 'Card') {
+      // Mini card skeleton: image + 2 text lines
+      const card = figma.createFrame();
+      card.layoutMode = 'VERTICAL';
+      card.primaryAxisSizingMode = 'AUTO';
+      card.counterAxisSizingMode = 'AUTO';
+      card.itemSpacing = 12;
+      card.paddingLeft = card.paddingRight = card.paddingTop = card.paddingBottom = 12;
+      card.cornerRadius = 8;
+      card.fills = [paintForVar(required['surface/card'])];
+      card.strokes = [paintForVar(required['border/default'])]; card.strokeWeight = 1; card.strokeAlign = 'INSIDE';
+      card.appendChild(bar(280, 120, 6));
+      const lines = figma.createFrame();
+      lines.layoutMode = 'VERTICAL'; lines.primaryAxisSizingMode = 'AUTO'; lines.counterAxisSizingMode = 'AUTO';
+      lines.itemSpacing = 6; lines.fills = [];
+      lines.appendChild(bar(220, 14, 4));
+      lines.appendChild(bar(160, 12, 4));
+      card.appendChild(lines);
+      comp.appendChild(card);
+    }
+
+    return { comp };
+  }
+
+  const TYPES = ['Text Line', 'Text Block', 'Avatar Circle', 'Avatar Square', 'Image', 'Card'];
+  const allVariants = []; const variantMeta = [];
+  for (const type of TYPES) {
+    const r = makeVariant(type);
+    allVariants.push(r.comp); variantMeta.push({ type });
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Skeleton'; compSet.layoutMode = 'NONE'; compSet.fills = [];
+
+  // 3 cols × 2 rows
+  const COLS = 3;
+  const PAD_LEFT = 220, PAD_TOP = 160, PAD_RIGHT = 56, PAD_BOT = 56;
+  const COL_W = 360, ROW_H = 220;
+  const colGroups = [{ name: 'Variant', x: PAD_LEFT, width: COL_W * COLS,
+    sizes: [0, 1, 2].map(i => ({ name: ['Col 1', 'Col 2', 'Col 3'][i], x: PAD_LEFT + i * COL_W, width: COL_W })) }];
+  const rowGroups = [
+    { name: 'Row 1', y: PAD_TOP, states: [{ name: '', y: PAD_TOP, height: ROW_H }] },
+    { name: 'Row 2', y: PAD_TOP + ROW_H, states: [{ name: '', y: PAD_TOP + ROW_H, height: ROW_H }] },
+  ];
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i];
+    const colIdx = i % COLS;
+    const rowIdx = Math.floor(i / COLS);
+    v.x = Math.round(PAD_LEFT + colIdx * COL_W + (COL_W - v.width) / 2);
+    v.y = Math.round(PAD_TOP + rowIdx * ROW_H + (ROW_H - v.height) / 2);
+  }
+  compSet.resize(PAD_LEFT + COLS * COL_W + PAD_RIGHT, PAD_TOP + 2 * ROW_H + PAD_BOT);
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Skeleton', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Skeleton built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
+// ACCORDION (Molecule) — collapsible row
+//   Style: Bordered | Borderless | Separated
+//   State: Collapsed | Expanded
+// =============================================================================
+async function buildAccordion() {
+  console.log('[OM DS] buildAccordion started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
+                     || figma.root.children.find(p => p.name.includes('Atoms'))
+                     || figma.currentPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Accordion');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Accordion')) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Style=(Bordered|Borderless|Separated), State=/.test(c.name))) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const iconDefault = required['icon/default'];
+  const chevDown = await findIconComp(iconsPage, ['chevron-down']) || await findOrCreateIconComponent('chevron-down', iconsPage, iconDefault);
+
+  async function makeVariant(style, state) {
+    const W = 420;
+    const isExpanded = state === 'Expanded';
+
+    const comp = figma.createComponent();
+    comp.name = `Style=${style}, State=${state}`;
+    comp.layoutMode = 'VERTICAL';
+    comp.primaryAxisSizingMode = 'AUTO';
+    comp.counterAxisSizingMode = 'FIXED';
+    comp.itemSpacing = 0;
+    comp.cornerRadius = style === 'Borderless' ? 0 : 8;
+    comp.clipsContent = true;
+    if (style === 'Bordered' || style === 'Separated') {
+      comp.strokes = [paintForVar(required['border/default'])]; comp.strokeWeight = 1; comp.strokeAlign = 'INSIDE';
+    }
+    comp.fills = style === 'Separated' ? [paintForVar(required['surface/card'])] : [];
+    comp.resize(W, comp.height);
+
+    // Header row
+    const header = figma.createFrame();
+    header.name = 'Header';
+    header.layoutMode = 'HORIZONTAL';
+    header.primaryAxisSizingMode = 'FIXED';
+    header.counterAxisSizingMode = 'AUTO';
+    header.counterAxisAlignItems = 'CENTER';
+    header.primaryAxisAlignItems = 'SPACE_BETWEEN';
+    header.itemSpacing = 12;
+    header.paddingLeft = header.paddingRight = 16;
+    header.paddingTop = header.paddingBottom = 14;
+    header.fills = [];
+    header.resize(W, 0);
+    comp.appendChild(header);
+    try { header.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    const title = figma.createText();
+    if (styleByName['Body/Default']) await title.setTextStyleIdAsync(styleByName['Body/Default'].id);
+    title.characters = 'Section title';
+    title.fills = [paintForVar(required['text/primary'])];
+    title.textAutoResize = 'WIDTH_AND_HEIGHT';
+    header.appendChild(title);
+
+    const chev = chevDown.createInstance();
+    chev.name = 'Chevron';
+    chev.resize(16, 16);
+    bindIconColorForm(chev, required['text/secondary']);
+    if (isExpanded) chev.rotation = 180;
+    header.appendChild(chev);
+    try { chev.layoutSizingHorizontal = 'FIXED'; chev.layoutSizingVertical = 'FIXED'; } catch (e) {}
+
+    if (isExpanded) {
+      // Optional internal divider
+      if (style === 'Bordered' || style === 'Separated') {
+        const div = figma.createFrame();
+        div.name = 'Divider';
+        div.fills = [paintForVar(required['border/default'])];
+        div.resize(W, 1);
+        comp.appendChild(div);
+        try { div.layoutSizingHorizontal = 'FILL'; div.layoutSizingVertical = 'FIXED'; } catch (e) {}
+      }
+
+      // Body
+      const body = figma.createFrame();
+      body.name = 'Body';
+      body.layoutMode = 'VERTICAL';
+      body.primaryAxisSizingMode = 'AUTO';
+      body.counterAxisSizingMode = 'FIXED';
+      body.itemSpacing = 8;
+      body.paddingLeft = body.paddingRight = 16;
+      body.paddingTop = 12; body.paddingBottom = 16;
+      body.fills = [];
+      body.resize(W, 0);
+      comp.appendChild(body);
+      try { body.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+      const txt = figma.createText();
+      if (styleByName['Body/Default']) await txt.setTextStyleIdAsync(styleByName['Body/Default'].id);
+      txt.characters = 'Expanded section content. Replace with any composition: text, lists, forms, or other components.';
+      txt.fills = [paintForVar(required['text/secondary'])];
+      txt.textAutoResize = 'HEIGHT';
+      body.appendChild(txt);
+      try { txt.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    }
+
+    return { comp };
+  }
+
+  const STYLES = ['Bordered', 'Borderless', 'Separated'];
+  const STATES = ['Collapsed', 'Expanded'];
+  const allVariants = []; const variantMeta = [];
+  for (const style of STYLES) for (const state of STATES) {
+    const r = await makeVariant(style, state);
+    allVariants.push(r.comp); variantMeta.push({ style, state });
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Accordion'; compSet.layoutMode = 'NONE'; compSet.fills = [];
+
+  const PAD_LEFT = 220, PAD_TOP = 160, PAD_RIGHT = 56, PAD_BOT = 56;
+  const COL_W = 480, ROW_H = 200;
+  const colGroups = [{ name: 'State', x: PAD_LEFT, width: COL_W * STATES.length,
+    sizes: STATES.map((s, i) => ({ name: s, x: PAD_LEFT + i * COL_W, width: COL_W })) }];
+  const rowGroups = STYLES.map((s, i) => ({ name: s, y: PAD_TOP + i * ROW_H, states: [{ name: '', y: PAD_TOP + i * ROW_H, height: ROW_H }] }));
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i]; const m = variantMeta[i];
+    const colIdx = STATES.indexOf(m.state);
+    const rowIdx = STYLES.indexOf(m.style);
+    v.x = Math.round(PAD_LEFT + colIdx * COL_W + (COL_W - v.width) / 2);
+    v.y = Math.round(PAD_TOP + rowIdx * ROW_H + 20);
+  }
+  compSet.resize(PAD_LEFT + STATES.length * COL_W + PAD_RIGHT, PAD_TOP + STYLES.length * ROW_H + PAD_BOT);
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Accordion', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Accordion built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
 // DROPDOWN — Single + Multi-Chips + Multi-Inline merged
 //   Type: Single | Multi-Chips | Multi-Inline
 //   Size: Small | Default | Large
@@ -8145,6 +9466,22 @@ async function rebuildAll() {
       await buildSearchBar();
     } else if (figma.command === 'buildBreadcrumb') {
       await buildBreadcrumb();
+    } else if (figma.command === 'buildTabs') {
+      await buildTabs();
+    } else if (figma.command === 'buildPagination') {
+      await buildPagination();
+    } else if (figma.command === 'buildCard') {
+      await buildCard();
+    } else if (figma.command === 'buildAlert') {
+      await buildAlert();
+    } else if (figma.command === 'buildToast') {
+      await buildToast();
+    } else if (figma.command === 'buildProgress') {
+      await buildProgress();
+    } else if (figma.command === 'buildSkeleton') {
+      await buildSkeleton();
+    } else if (figma.command === 'buildAccordion') {
+      await buildAccordion();
     } else {
       await bootstrap();
     }

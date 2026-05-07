@@ -29,6 +29,14 @@
     { "name": "Build Dropdown Menu (Molecule)", "command": "buildDropdownMenu" },
     { "name": "Build Search Bar (Molecule)", "command": "buildSearchBar" },
     { "name": "Build Breadcrumb (Molecule)", "command": "buildBreadcrumb" },
+    { "name": "Build Tabs (Molecule)", "command": "buildTabs" },
+    { "name": "Build Pagination (Molecule)", "command": "buildPagination" },
+    { "name": "Build Card (Molecule)", "command": "buildCard" },
+    { "name": "Build Alert (Molecule)", "command": "buildAlert" },
+    { "name": "Build Toast (Molecule)", "command": "buildToast" },
+    { "name": "Build Progress (Molecule)", "command": "buildProgress" },
+    { "name": "Build Skeleton (Molecule)", "command": "buildSkeleton" },
+    { "name": "Build Accordion (Molecule)", "command": "buildAccordion" },
     { "name": "Reset Text Styles", "command": "resetTextStyles" },
     { "name": "Reset (Delete OM Collections)", "command": "reset" }
   ]

@@ -12807,6 +12807,33 @@ async function buildPageHeader() {
   try { await figma.loadAllPagesAsync(); } catch (e) {}
   const required = await resolveFormTokens('PageHeader');
 
+  // Load Component/PageHeader collection vars directly so each layer binds to
+  // its own dedicated token (text/title ≠ text/subtitle ≠ text/breadcrumb,
+  // even when they share a semantic source). The substitution inside
+  // resolveFormTokens is "first wins" and would otherwise collapse them.
+  const phCol = (await figma.variables.getLocalVariableCollectionsAsync())
+    .find(c => c.name === 'Component/PageHeader');
+  const phVars = {};
+  if (phCol) {
+    const all = await figma.variables.getLocalVariablesAsync('COLOR');
+    for (const v of all) {
+      if (v.variableCollectionId === phCol.id) phVars[v.name] = v;
+    }
+  }
+  const ph = (name) => phVars[name] || required[name === 'surface' ? 'surface/card'
+    : name === 'surface/page' ? 'surface/base'
+    : name === 'border/divider' ? 'border/default'
+    : name === 'text/title' ? 'text/primary'
+    : name === 'text/subtitle' ? 'text/secondary'
+    : name === 'text/breadcrumb' ? 'text/secondary'
+    : name === 'text/breadcrumb/current' ? 'text/primary'
+    : name === 'icon/default' ? 'icon/default'
+    : name === 'tabs/baseline' ? 'border/default'
+    : name === 'tabs/text/default' ? 'text/secondary'
+    : name === 'tabs/text/active' ? 'brand/primary'
+    : name === 'tabs/indicator' ? 'brand/primary'
+    : 'text/primary'];
+
   const organismsPage = figma.root.children.find(p => p.name.includes('Organisms')) || figma.currentPage;
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'));
   const atomsPage = figma.root.children.find(p => p.name.includes('Atoms'));
@@ -12876,8 +12903,8 @@ async function buildPageHeader() {
     comp.itemSpacing = sectionGap;
     comp.paddingLeft = comp.paddingRight = pad;
     comp.paddingTop = comp.paddingBottom = pad;
-    comp.fills = [paintForVar(required['surface/card'])];
-    comp.strokes = [paintForVar(required['border/default'])];
+    comp.fills = [paintForVar(ph('surface'))];
+    comp.strokes = [paintForVar(ph('border/divider'))];
     comp.strokeWeight = 1;
     comp.strokeAlign = 'INSIDE';
     comp.strokeBottomWeight = 1;
@@ -12922,7 +12949,7 @@ async function buildPageHeader() {
     const ts = styleByName[titleStyle];
     if (ts) await title.setTextStyleIdAsync(ts.id);
     title.characters = 'Customer Insights';
-    title.fills = [paintForVar(required['text/primary'])];
+    title.fills = [paintForVar(ph('text/title'))];
     titleCluster.appendChild(title);
 
     if (!isCompact) {
@@ -12930,7 +12957,7 @@ async function buildPageHeader() {
       const ss = styleByName['Body/Default'];
       if (ss) await sub.setTextStyleIdAsync(ss.id);
       sub.characters = 'Track engagement, satisfaction, and growth across all segments.';
-      sub.fills = [paintForVar(required['text/secondary'])];
+      sub.fills = [paintForVar(ph('text/subtitle'))];
       titleCluster.appendChild(sub);
       try { sub.layoutSizingHorizontal = 'FILL'; } catch (e) {}
     }
@@ -12998,8 +13025,8 @@ async function buildPageHeader() {
   compSet.paddingTop = compSet.paddingBottom = 32;
   compSet.primaryAxisSizingMode = 'AUTO';
   compSet.counterAxisSizingMode = 'AUTO';
-  compSet.fills = [paintForVar(required['surface/base'])];
-  compSet.strokes = [paintForVar(required['border/default'])];
+  compSet.fills = [paintForVar(ph('surface/page'))];
+  compSet.strokes = [paintForVar(ph('border/divider'))];
   compSet.strokeWeight = 1;
   compSet.cornerRadius = 16;
 
@@ -13012,7 +13039,7 @@ async function buildPageHeader() {
   showcase.paddingTop = showcase.paddingBottom = 48;
   showcase.primaryAxisSizingMode = 'AUTO';
   showcase.counterAxisSizingMode = 'AUTO';
-  showcase.fills = [paintForVar(required['surface/base'])];
+  showcase.fills = [paintForVar(ph('surface/page'))];
   organismsPage.appendChild(showcase);
   showcase.x = compSet.x + compSet.width + 100;
   showcase.y = compSet.y;
@@ -13021,14 +13048,14 @@ async function buildPageHeader() {
   const hs = styleByName['Heading/H1'];
   if (hs) await heading.setTextStyleIdAsync(hs.id);
   heading.characters = 'Page Header';
-  heading.fills = [paintForVar(required['text/primary'])];
+  heading.fills = [paintForVar(ph('text/title'))];
   showcase.appendChild(heading);
 
   const sub = figma.createText();
   const ss = styleByName['Body/Default'];
   if (ss) await sub.setTextStyleIdAsync(ss.id);
   sub.characters = 'Top-of-page region: Breadcrumb + Title + Actions, with optional Search and Tabs.';
-  sub.fills = [paintForVar(required['text/secondary'])];
+  sub.fills = [paintForVar(ph('text/subtitle'))];
   showcase.appendChild(sub);
 
   for (const v of variants) {
@@ -13036,7 +13063,7 @@ async function buildPageHeader() {
     const ls = styleByName['Heading/H4'];
     if (ls) await label.setTextStyleIdAsync(ls.id);
     label.characters = v.name;
-    label.fills = [paintForVar(required['text/secondary'])];
+    label.fills = [paintForVar(ph('text/subtitle'))];
     showcase.appendChild(label);
     const inst = v.createInstance();
     showcase.appendChild(inst);

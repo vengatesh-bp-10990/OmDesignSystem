@@ -5503,6 +5503,20 @@ function bindIconColorForm(inst, colorVar) {
   try { apply(inst); } catch (e) {}
 }
 
+// Resize an icon INSTANCE (or any node with children) by RESCALING — keeps
+// inner glyph proportional to the wrapper FRAME. Plain .resize() leaves child
+// vectors at their original coordinates (icon pops outside the box).
+function resizeIconInstance(inst, size) {
+  if (!inst) return;
+  try {
+    const cur = inst.width || size;
+    const scale = size / cur;
+    if (Math.abs(scale - 1) > 0.001) {
+      try { inst.rescale(scale); } catch (e) { try { inst.resize(size, size); } catch (_) {} }
+    }
+  } catch (e) {}
+}
+
 // Find an icon component by trying multiple common names.
 async function findIconComp(iconsPage, names, fallbackColor) {
   if (!iconsPage) return null;
@@ -7460,7 +7474,7 @@ async function buildSearchBar() {
     // Leading search icon — always visible
     const sIc = searchIc.createInstance();
     sIc.name = 'Search Icon';
-    sIc.resize(spec.icon, spec.icon);
+    resizeIconInstance(sIc, spec.icon);
     bindIconColorForm(sIc, colors.icon);
     comp.appendChild(sIc);
     try { sIc.layoutSizingHorizontal = 'FIXED'; sIc.layoutSizingVertical = 'FIXED'; } catch (e) {}
@@ -7478,7 +7492,7 @@ async function buildSearchBar() {
     // Trailing clear ✕ — always created, visible only in Filled
     const xIc = clearIc.createInstance();
     xIc.name = 'Clear';
-    xIc.resize(spec.icon, spec.icon);
+    resizeIconInstance(xIc, spec.icon);
     bindIconColorForm(xIc, colors.icon);
     xIc.visible = (state === 'Filled');
     comp.appendChild(xIc);
@@ -7487,7 +7501,7 @@ async function buildSearchBar() {
     // Trailing filter — always created, hidden by default (boolean prop)
     const fIc = filterIc.createInstance();
     fIc.name = 'Filter';
-    fIc.resize(spec.icon, spec.icon);
+    resizeIconInstance(fIc, spec.icon);
     bindIconColorForm(fIc, colors.icon);
     fIc.visible = false;
     comp.appendChild(fIc);
@@ -7654,7 +7668,7 @@ async function buildBreadcrumb() {
       if (isFirst && style === 'With Home Icon') {
         const ic = homeIc.createInstance();
         ic.name = 'Home';
-        ic.resize(spec.icon, spec.icon);
+        resizeIconInstance(ic, spec.icon);
         bindIconColorForm(ic, required['text/secondary']);
         comp.appendChild(ic);
         try { ic.layoutSizingHorizontal = 'FIXED'; ic.layoutSizingVertical = 'FIXED'; } catch (e) {}
@@ -7667,7 +7681,7 @@ async function buildBreadcrumb() {
       if (i < labels.length - 1) {
         const sep = chevronIc.createInstance();
         sep.name = 'Separator';
-        sep.resize(spec.icon, spec.icon);
+        resizeIconInstance(sep, spec.icon);
         bindIconColorForm(sep, required['text/tertiary'] || required['text/secondary']);
         comp.appendChild(sep);
         try { sep.layoutSizingHorizontal = 'FIXED'; sep.layoutSizingVertical = 'FIXED'; } catch (e) {}
@@ -7703,7 +7717,7 @@ async function buildBreadcrumb() {
 
   // Layout: cols = Style (3), rows = Length (4) × Size (2)
   const PAD_LEFT = 220, PAD_TOP = 160, PAD_RIGHT = 56, PAD_BOT = 56;
-  const COL_W = 360, ROW_H = 64, GROUP_GAP = 40;
+  const COL_W = 480, ROW_H = 64, GROUP_GAP = 40;
 
   const colGroups = [{
     name: 'Style', x: PAD_LEFT, width: COL_W * STYLES.length,
@@ -7847,8 +7861,9 @@ async function buildTabs() {
   }
 
   const SIZE_SPECS = {
-    Small:   { h: 32, padX: 12, padY: 6,  font: 'Body/Small',   icon: 14, gap: 6,  radius: 6  },
-    Default: { h: 40, padX: 16, padY: 10, font: 'Body/Default', icon: 16, gap: 8,  radius: 8  },
+    Small:   { h: 28, padX: 10, padY: 4,  font: 'Body/Small',   icon: 14, gap: 6,  radius: 6  },
+    Default: { h: 32, padX: 12, padY: 6,  font: 'Body/Small',   icon: 14, gap: 6,  radius: 6  },
+    Large:   { h: 36, padX: 14, padY: 8,  font: 'Body/Default', icon: 16, gap: 8,  radius: 8  },
   };
 
   function pickColors(style, state) {
@@ -7912,7 +7927,7 @@ async function buildTabs() {
     // Leading icon
     const ic = leadIc.createInstance();
     ic.name = 'Leading Icon';
-    ic.resize(spec.icon, spec.icon);
+    resizeIconInstance(ic, spec.icon);
     bindIconColorForm(ic, colors.text);
     row.appendChild(ic);
     try { ic.layoutSizingHorizontal = 'FIXED'; ic.layoutSizingVertical = 'FIXED'; } catch (e) {}
@@ -7960,7 +7975,7 @@ async function buildTabs() {
   }
 
   const STYLES = ['Line', 'Boxy', 'Pill'];
-  const SIZES  = ['Small', 'Default'];
+  const SIZES  = ['Small', 'Default', 'Large'];
   const STATES = ['Default', 'Hover', 'Active', 'Disabled'];
 
   const allVariants = []; const variantMeta = []; const icons = []; const badges = [];
@@ -8031,7 +8046,7 @@ async function buildPagination() {
   const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Pagination');
   if (_exist) _exist.remove();
   for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Pagination')) n.remove();
-  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Style=(Numbered|Prev-Next|Compact), Size=(Small|Default)$/.test(c.name))) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Style=(Numbered|Prev-Next|Compact), Size=(Small|Default), State=/.test(c.name))) n.remove();
 
   const styles = await figma.getLocalTextStylesAsync();
   const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
@@ -8048,7 +8063,12 @@ async function buildPagination() {
     Default: { btn: 36, font: 'Body/Default', icon: 16, gap: 6, radius: 8 },
   };
 
-  async function makePageBtn(spec, label, isActive, isIcon) {
+  // mode: 'default' | 'hover' | 'active' | 'disabled'
+  async function makePageBtn(spec, label, mode, isIcon) {
+    const isActive   = mode === 'active';
+    const isHover    = mode === 'hover';
+    const isDisabled = mode === 'disabled';
+
     const b = figma.createFrame();
     b.name = isIcon ? `Btn-${label}` : `Page-${label}`;
     b.layoutMode = 'HORIZONTAL';
@@ -8057,15 +8077,27 @@ async function buildPagination() {
     b.primaryAxisAlignItems = 'CENTER';
     b.counterAxisAlignItems = 'CENTER';
     b.cornerRadius = spec.radius;
-    b.fills = isActive ? [paintForVar(required['brand/primary'])] : [];
-    b.strokes = isActive ? [] : [paintForVar(required['border/default'])];
-    if (!isActive) { b.strokeWeight = 1; b.strokeAlign = 'INSIDE'; }
+
+    // Fills
+    if (isActive) b.fills = [paintForVar(required['brand/primary'])];
+    else if (isHover) b.fills = [paintForVar(required['state/disabled-bg'])];
+    else b.fills = [];
+
+    // Border
+    if (isActive) b.strokes = [];
+    else { b.strokes = [paintForVar(isDisabled ? required['state/disabled-border'] : required['border/default'])]; b.strokeWeight = 1; b.strokeAlign = 'INSIDE'; }
+
     b.resize(spec.btn, spec.btn);
+
+    const fgColor = isActive
+      ? (required['brand/on-primary'] || required['surface/card'])
+      : (isDisabled ? required['state/disabled-text'] : (isHover ? required['text/primary'] : required['text/secondary']));
+
     if (isIcon) {
       const which = label === 'prev' ? prevIc : nextIc;
       const ic = which.createInstance();
-      ic.resize(spec.icon, spec.icon);
-      bindIconColorForm(ic, required['text/secondary']);
+      resizeIconInstance(ic, spec.icon);
+      bindIconColorForm(ic, fgColor);
       b.appendChild(ic);
       try { ic.layoutSizingHorizontal = 'FIXED'; ic.layoutSizingVertical = 'FIXED'; } catch (e) {}
     } else {
@@ -8073,17 +8105,22 @@ async function buildPagination() {
       const fStyle = styleByName[spec.font];
       if (fStyle) await t.setTextStyleIdAsync(fStyle.id);
       t.characters = label;
-      t.fills = [paintForVar(isActive ? (required['brand/on-primary'] || required['surface/card']) : required['text/primary'])];
+      t.fills = [paintForVar(fgColor)];
       t.textAutoResize = 'WIDTH_AND_HEIGHT';
       b.appendChild(t);
     }
     return b;
   }
 
-  async function makeVariant(style, size) {
+  // state: 'Default' | 'Hover' | 'First Page' | 'Last Page'
+  // - Default     → both arrows enabled, page 2 active
+  // - Hover       → page 3 hovered (greyish bg)
+  // - First Page  → prev disabled, page 1 active
+  // - Last Page   → next disabled, page 8 active
+  async function makeVariant(style, size, state) {
     const spec = SIZE_SPECS[size];
     const comp = figma.createComponent();
-    comp.name = `Style=${style}, Size=${size}`;
+    comp.name = `Style=${style}, Size=${size}, State=${state}`;
     comp.layoutMode = 'HORIZONTAL';
     comp.primaryAxisSizingMode = 'AUTO';
     comp.counterAxisSizingMode = 'AUTO';
@@ -8092,63 +8129,83 @@ async function buildPagination() {
     comp.paddingLeft = comp.paddingRight = comp.paddingTop = comp.paddingBottom = 0;
     comp.fills = [];
 
-    const prev = await makePageBtn(spec, 'prev', false, true);
-    comp.appendChild(prev);
+    const prevMode = state === 'First Page' ? 'disabled' : 'default';
+    const nextMode = state === 'Last Page'  ? 'disabled' : 'default';
+
+    comp.appendChild(await makePageBtn(spec, 'prev', prevMode, true));
 
     if (style === 'Numbered') {
       const pages = ['1', '2', '3', '…', '8'];
+      // Determine active + hover index per state
+      let activeIdx = 1; // default: '2'
+      let hoverIdx  = -1;
+      if (state === 'First Page') activeIdx = 0;
+      else if (state === 'Last Page')  activeIdx = pages.length - 1;
+      else if (state === 'Hover') { activeIdx = 1; hoverIdx = 2; }
       for (let i = 0; i < pages.length; i++) {
-        const b = await makePageBtn(spec, pages[i], i === 1, false);
-        comp.appendChild(b);
+        const isEllipsis = pages[i] === '…';
+        const m = isEllipsis ? 'default' : (i === activeIdx ? 'active' : (i === hoverIdx ? 'hover' : 'default'));
+        comp.appendChild(await makePageBtn(spec, pages[i], m, false));
       }
     } else if (style === 'Compact') {
       const t = figma.createText();
       const fStyle = styleByName[spec.font];
       if (fStyle) await t.setTextStyleIdAsync(fStyle.id);
-      t.characters = 'Page 2 of 8';
+      const cur = state === 'First Page' ? 1 : (state === 'Last Page' ? 8 : 2);
+      t.characters = `Page ${cur} of 8`;
       t.fills = [paintForVar(required['text/secondary'])];
       t.textAutoResize = 'WIDTH_AND_HEIGHT';
       comp.appendChild(t);
     } else {
-      // Prev-Next: just the two arrows + label
       const t = figma.createText();
       const fStyle = styleByName[spec.font];
       if (fStyle) await t.setTextStyleIdAsync(fStyle.id);
-      t.characters = '2 / 8';
+      const cur = state === 'First Page' ? 1 : (state === 'Last Page' ? 8 : 2);
+      t.characters = `${cur} / 8`;
       t.fills = [paintForVar(required['text/primary'])];
       t.textAutoResize = 'WIDTH_AND_HEIGHT';
       comp.appendChild(t);
     }
 
-    const next = await makePageBtn(spec, 'next', false, true);
-    comp.appendChild(next);
+    comp.appendChild(await makePageBtn(spec, 'next', nextMode, true));
     return { comp };
   }
 
   const STYLES = ['Numbered', 'Prev-Next', 'Compact'];
   const SIZES  = ['Small', 'Default'];
+  const STATES = ['Default', 'Hover', 'First Page', 'Last Page'];
   const allVariants = []; const variantMeta = [];
-  for (const style of STYLES) for (const size of SIZES) {
-    const r = await makeVariant(style, size);
-    allVariants.push(r.comp); variantMeta.push({ style, size });
+  for (const style of STYLES) for (const size of SIZES) for (const state of STATES) {
+    // Hover only relevant to Numbered (others have no number to hover)
+    if (state === 'Hover' && style !== 'Numbered') continue;
+    const r = await makeVariant(style, size, state);
+    allVariants.push(r.comp); variantMeta.push({ style, size, state });
   }
 
   const compSet = figma.combineAsVariants(allVariants, moleculesPage);
   compSet.name = 'Pagination'; compSet.layoutMode = 'NONE'; compSet.fills = [];
 
   const PAD_LEFT = 220, PAD_TOP = 160, PAD_RIGHT = 56, PAD_BOT = 56;
-  const COL_W = 380, ROW_H = 80;
+  const COL_W = 380, ROW_H = 80, GROUP_GAP = 32;
   const colGroups = [{ name: 'Size', x: PAD_LEFT, width: COL_W * SIZES.length,
     sizes: SIZES.map((s, i) => ({ name: s, x: PAD_LEFT + i * COL_W, width: COL_W })) }];
-  const rowGroups = STYLES.map((style, i) => ({ name: style, y: PAD_TOP + i * ROW_H, states: [{ name: '', y: PAD_TOP + i * ROW_H, height: ROW_H }] }));
+  const rowGroups = [];
+  let cy = PAD_TOP;
+  for (const style of STYLES) {
+    const stStates = STATES.filter(st => !(st === 'Hover' && style !== 'Numbered'));
+    const states = stStates.map((st, i) => ({ name: st, y: cy + i * ROW_H, height: ROW_H }));
+    rowGroups.push({ name: style, y: cy, states });
+    cy += stStates.length * ROW_H + GROUP_GAP;
+  }
   for (let i = 0; i < allVariants.length; i++) {
     const v = allVariants[i]; const m = variantMeta[i];
     const colIdx = SIZES.indexOf(m.size);
-    const rowIdx = STYLES.indexOf(m.style);
+    const rg = rowGroups.find(r => r.name === m.style);
+    const st = rg.states.find(s => s.name === m.state);
     v.x = Math.round(PAD_LEFT + colIdx * COL_W + 16);
-    v.y = Math.round(PAD_TOP + rowIdx * ROW_H + (ROW_H - v.height) / 2);
+    v.y = Math.round(st.y + (ROW_H - v.height) / 2);
   }
-  compSet.resize(PAD_LEFT + SIZES.length * COL_W + PAD_RIGHT, PAD_TOP + STYLES.length * ROW_H + PAD_BOT);
+  compSet.resize(PAD_LEFT + SIZES.length * COL_W + PAD_RIGHT, cy + PAD_BOT);
   autoPositionBelow(moleculesPage, compSet, 120);
 
   await decorateComponentSet({
@@ -8387,30 +8444,42 @@ async function buildAlert() {
   async function makeVariant(status, style) {
     const tok = statusTokens(required, status);
     const isSolid = style === 'Solid';
+    // Neutral Solid uses surface/inverse tone (text/primary as bg) so it reads as a dark-mode panel.
+    // For other statuses, isSolid bg = the status hue.
+    const solidBg = status === 'Neutral' ? required['text/primary'] : tok.color;
     const onColor = isSolid ? (required['brand/on-primary'] || required['surface/card']) : tok.text;
-    const bg     = isSolid ? tok.color : (style === 'Subtle' ? tok.subtle : null);
-    const border = isSolid ? null      : (style === 'Outlined' ? tok.border : tok.border);
+    const bg     = isSolid ? solidBg : (style === 'Subtle' ? tok.subtle : null);
+    const border = isSolid ? null      : tok.border;
 
     const comp = figma.createComponent();
     comp.name = `Status=${status}, Style=${style}`;
     comp.layoutMode = 'HORIZONTAL';
     comp.primaryAxisSizingMode = 'FIXED';
     comp.counterAxisSizingMode = 'AUTO';
+    comp.counterAxisAlignItems = 'CENTER';
     comp.itemSpacing = 12;
     comp.paddingLeft = comp.paddingRight = 16;
     comp.paddingTop = comp.paddingBottom = 12;
     comp.cornerRadius = 8;
     comp.fills = bg ? [paintForVar(bg)] : [];
     if (border) { comp.strokes = [paintForVar(border)]; comp.strokeWeight = 1; comp.strokeAlign = 'INSIDE'; }
-    comp.resize(420, comp.height);
+    comp.resize(420, 1);
+    comp.primaryAxisSizingMode = 'FIXED';   // keep width fixed
+    comp.counterAxisSizingMode = 'AUTO';    // re-enable height hug after resize()
 
-    // Leading status icon
+    // Leading status icon (try several Zoho synonyms before falling back)
     const iconName = statusIconName(status);
-    let ic = await findIconComp(iconsPage, [iconName, 'info-circle', 'info']);
-    if (!ic) ic = await findOrCreateIconComponent('info', iconsPage, iconDefault);
+    const synonyms = {
+      'info':           ['info-circle', 'info', 'information', 'info-fill'],
+      'check-circle':   ['check-circle', 'check-circle-fill', 'success', 'tick-circle'],
+      'alert-triangle': ['alert-triangle', 'warning', 'warning-triangle', 'exclamation-triangle'],
+      'alert-circle':   ['alert-circle', 'alert', 'error', 'error-circle', 'exclamation-circle'],
+    }[iconName] || [iconName];
+    let ic = await findIconComp(iconsPage, synonyms);
+    if (!ic) ic = await findOrCreateIconComponent(iconName, iconsPage, iconDefault);
     const icInst = ic.createInstance();
     icInst.name = 'Status Icon';
-    icInst.resize(20, 20);
+    resizeIconInstance(icInst, 20);
     bindIconColorForm(icInst, onColor);
     comp.appendChild(icInst);
     try { icInst.layoutSizingHorizontal = 'FIXED'; icInst.layoutSizingVertical = 'FIXED'; } catch (e) {}
@@ -8453,7 +8522,7 @@ async function buildAlert() {
     // Close button
     const close = closeIc.createInstance();
     close.name = 'Close';
-    close.resize(16, 16);
+    resizeIconInstance(close, 16);
     bindIconColorForm(close, onColor);
     comp.appendChild(close);
     try { close.layoutSizingHorizontal = 'FIXED'; close.layoutSizingVertical = 'FIXED'; } catch (e) {}
@@ -8579,11 +8648,17 @@ async function buildToast() {
 
     // Status icon
     const iconName = statusIconName(status);
-    let ic = await findIconComp(iconsPage, [iconName, 'info-circle', 'info']);
-    if (!ic) ic = await findOrCreateIconComponent('info', iconsPage, iconDefault);
+    const synonyms = {
+      'info':           ['info-circle', 'info', 'information', 'info-fill'],
+      'check-circle':   ['check-circle', 'check-circle-fill', 'success', 'tick-circle'],
+      'alert-triangle': ['alert-triangle', 'warning', 'warning-triangle', 'exclamation-triangle'],
+      'alert-circle':   ['alert-circle', 'alert', 'error', 'error-circle', 'exclamation-circle'],
+    }[iconName] || [iconName];
+    let ic = await findIconComp(iconsPage, synonyms);
+    if (!ic) ic = await findOrCreateIconComponent(iconName, iconsPage, iconDefault);
     const icInst = ic.createInstance();
     icInst.name = 'Status Icon';
-    icInst.resize(18, 18);
+    resizeIconInstance(icInst, 18);
     bindIconColorForm(icInst, tok.color);
     comp.appendChild(icInst);
     try { icInst.layoutSizingHorizontal = 'FIXED'; icInst.layoutSizingVertical = 'FIXED'; } catch (e) {}
@@ -8627,7 +8702,7 @@ async function buildToast() {
     // Close
     const close = closeIc.createInstance();
     close.name = 'Close';
-    close.resize(16, 16);
+    resizeIconInstance(close, 16);
     bindIconColorForm(close, required['text/secondary']);
     comp.appendChild(close);
     try { close.layoutSizingHorizontal = 'FIXED'; close.layoutSizingVertical = 'FIXED'; } catch (e) {}
@@ -8941,8 +9016,6 @@ async function buildAccordion() {
     const comp = figma.createComponent();
     comp.name = `Style=${style}, State=${state}`;
     comp.layoutMode = 'VERTICAL';
-    comp.primaryAxisSizingMode = 'AUTO';
-    comp.counterAxisSizingMode = 'FIXED';
     comp.itemSpacing = 0;
     comp.cornerRadius = style === 'Borderless' ? 0 : 8;
     comp.clipsContent = true;
@@ -8950,23 +9023,23 @@ async function buildAccordion() {
       comp.strokes = [paintForVar(required['border/default'])]; comp.strokeWeight = 1; comp.strokeAlign = 'INSIDE';
     }
     comp.fills = style === 'Separated' ? [paintForVar(required['surface/card'])] : [];
-    comp.resize(W, comp.height);
+    // Establish width FIRST, then re-enable primary-axis hug so it grows with children
+    comp.resize(W, 1);
+    comp.counterAxisSizingMode = 'FIXED';
+    comp.primaryAxisSizingMode = 'AUTO';
 
     // Header row
     const header = figma.createFrame();
     header.name = 'Header';
     header.layoutMode = 'HORIZONTAL';
-    header.primaryAxisSizingMode = 'FIXED';
-    header.counterAxisSizingMode = 'AUTO';
     header.counterAxisAlignItems = 'CENTER';
     header.primaryAxisAlignItems = 'SPACE_BETWEEN';
     header.itemSpacing = 12;
     header.paddingLeft = header.paddingRight = 16;
     header.paddingTop = header.paddingBottom = 14;
     header.fills = [];
-    header.resize(W, 0);
     comp.appendChild(header);
-    try { header.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    try { header.layoutSizingHorizontal = 'FILL'; header.layoutSizingVertical = 'HUG'; } catch (e) {}
 
     const title = figma.createText();
     if (styleByName['Body/Default']) await title.setTextStyleIdAsync(styleByName['Body/Default'].id);
@@ -8977,14 +9050,14 @@ async function buildAccordion() {
 
     const chev = chevDown.createInstance();
     chev.name = 'Chevron';
-    chev.resize(16, 16);
+    resizeIconInstance(chev, 16);
     bindIconColorForm(chev, required['text/secondary']);
     if (isExpanded) chev.rotation = 180;
     header.appendChild(chev);
     try { chev.layoutSizingHorizontal = 'FIXED'; chev.layoutSizingVertical = 'FIXED'; } catch (e) {}
 
     if (isExpanded) {
-      // Optional internal divider
+      // Internal divider (full-width)
       if (style === 'Bordered' || style === 'Separated') {
         const div = figma.createFrame();
         div.name = 'Divider';
@@ -8998,15 +9071,12 @@ async function buildAccordion() {
       const body = figma.createFrame();
       body.name = 'Body';
       body.layoutMode = 'VERTICAL';
-      body.primaryAxisSizingMode = 'AUTO';
-      body.counterAxisSizingMode = 'FIXED';
       body.itemSpacing = 8;
       body.paddingLeft = body.paddingRight = 16;
       body.paddingTop = 12; body.paddingBottom = 16;
       body.fills = [];
-      body.resize(W, 0);
       comp.appendChild(body);
-      try { body.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+      try { body.layoutSizingHorizontal = 'FILL'; body.layoutSizingVertical = 'HUG'; } catch (e) {}
 
       const txt = figma.createText();
       if (styleByName['Body/Default']) await txt.setTextStyleIdAsync(styleByName['Body/Default'].id);

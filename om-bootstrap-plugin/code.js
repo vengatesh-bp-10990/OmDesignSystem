@@ -9432,6 +9432,302 @@ async function buildAccordion() {
 
 
 // =============================================================================
+// TABS (Molecule) — full bar that contains 5 Option tabs.
+// Mirrors the Blade DSL "Tabs" reference structure:
+//   Orientation: Horizontal | Vertical
+//   Variant:
+//     Horizontal → Bordered | Borderless | Filled
+//     Vertical   → Thinner  | Thin
+//   Size: Medium | Large
+//   Full Width: True | False  (Horizontal only — Vertical pinned False)
+// Active option is the first; subsequent options are Default state.
+// =============================================================================
+async function buildTabs2() {
+  console.log('[OM DS] buildTabs2 (Tabs molecule) started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'))
+                     || figma.root.children.find(p => p.name.includes('Atoms'))
+                     || figma.currentPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Tabs');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Tabs')) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Orientation=(Horizontal|Vertical),/.test(c.name))) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+
+  // Per-size dimensions (mirrors Blade Medium/Large semantics).
+  const SIZE = {
+    Medium: { h: 32, padX: 14, padY: 6, font: 'Body/Small',   indicatorH: 2, gap: 8,  rowH: 36 },
+    Large:  { h: 40, padX: 16, padY: 8, font: 'Body/Default', indicatorH: 2, gap: 8,  rowH: 44 },
+  };
+
+  const LABELS = ['Option', 'Option', 'Option', 'Option', 'Option'];
+  const ACTIVE_INDEX = 0;
+  const HORIZONTAL_W = 520;
+  const VERTICAL_W = 160;
+
+  // --- Horizontal tab cell ---------------------------------------------------
+  async function makeHorizontalCell(spec, label, active, variant, fullWidth) {
+    const cell = figma.createFrame();
+    cell.name = active ? `Option-Active` : `Option`;
+    cell.layoutMode = 'VERTICAL';
+    cell.itemSpacing = 0;
+    cell.primaryAxisSizingMode = 'AUTO';
+    cell.counterAxisSizingMode = 'AUTO';
+    cell.fills = [];
+
+    const row = figma.createFrame();
+    row.name = 'Tab';
+    row.layoutMode = 'HORIZONTAL';
+    row.primaryAxisAlignItems = 'CENTER';
+    row.counterAxisAlignItems = 'CENTER';
+    row.paddingLeft = row.paddingRight = spec.padX;
+    row.paddingTop = row.paddingBottom = spec.padY;
+    row.itemSpacing = 6;
+    row.primaryAxisSizingMode = 'AUTO';
+    row.counterAxisSizingMode = 'FIXED';
+    row.resize(row.width, spec.h);
+    row.cornerRadius = variant === 'Filled' ? 6 : 0;
+    if (variant === 'Filled' && active) {
+      row.fills = [paintForVar(required['surface/card'])];
+      row.strokes = [paintForVar(required['border/default'])];
+      row.strokeWeight = 1; row.strokeAlign = 'INSIDE';
+    } else {
+      row.fills = [];
+    }
+    cell.appendChild(row);
+    try { row.layoutSizingHorizontal = 'FILL'; row.layoutSizingVertical = 'FIXED'; } catch (e) {}
+
+    const t = figma.createText();
+    const fStyle = styleByName[spec.font];
+    if (fStyle) await t.setTextStyleIdAsync(fStyle.id);
+    t.characters = label;
+    t.fills = [paintForVar(active ? required['brand/primary'] : required['text/secondary'])];
+    t.textAutoResize = 'WIDTH_AND_HEIGHT';
+    row.appendChild(t);
+
+    // Underline indicator (Bordered + Borderless variants only)
+    if (variant !== 'Filled') {
+      const ind = figma.createFrame();
+      ind.name = 'Indicator';
+      ind.fills = active ? [paintForVar(required['brand/primary'])] : [];
+      ind.resize(cell.width, spec.indicatorH);
+      cell.appendChild(ind);
+      try { ind.layoutSizingHorizontal = 'FILL'; ind.layoutSizingVertical = 'FIXED'; } catch (e) {}
+    }
+    return cell;
+  }
+
+  async function makeHorizontalBar(variant, size, fullWidth) {
+    const spec = SIZE[size];
+    const wrap = figma.createComponent();
+    wrap.name = `Orientation=Horizontal, Variant=${variant}, Size=${size}, Full Width=${fullWidth}`;
+    wrap.layoutMode = 'VERTICAL';
+    wrap.itemSpacing = 0;
+    wrap.fills = [];
+    wrap.primaryAxisSizingMode = 'AUTO';
+    wrap.counterAxisSizingMode = 'FIXED';
+    wrap.resize(HORIZONTAL_W, 1);
+
+    // Tab row
+    const row = figma.createFrame();
+    row.name = 'Tabs Row';
+    row.layoutMode = 'HORIZONTAL';
+    row.itemSpacing = variant === 'Filled' ? 4 : 0;
+    row.primaryAxisSizingMode = 'FIXED';
+    row.counterAxisSizingMode = 'AUTO';
+    row.counterAxisAlignItems = 'CENTER';
+    row.primaryAxisAlignItems = fullWidth ? 'CENTER' : 'MIN';
+    if (variant === 'Filled') {
+      row.fills = [paintForVar(required['state/disabled-bg'])];
+      row.cornerRadius = 8;
+      row.paddingLeft = row.paddingRight = 4;
+      row.paddingTop = row.paddingBottom = 4;
+    } else {
+      row.fills = [];
+    }
+    wrap.appendChild(row);
+    try { row.layoutSizingHorizontal = 'FILL'; row.layoutSizingVertical = 'HUG'; } catch (e) {}
+
+    for (let i = 0; i < LABELS.length; i++) {
+      const cell = await makeHorizontalCell(spec, LABELS[i], i === ACTIVE_INDEX, variant, fullWidth);
+      row.appendChild(cell);
+      if (fullWidth) {
+        try { cell.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+      }
+    }
+
+    // Bordered: continuous bottom border under the row (1px line)
+    if (variant === 'Bordered') {
+      const baseline = figma.createFrame();
+      baseline.name = 'Baseline';
+      baseline.fills = [paintForVar(required['border/default'])];
+      baseline.resize(HORIZONTAL_W, 1);
+      wrap.appendChild(baseline);
+      try { baseline.layoutSizingHorizontal = 'FILL'; baseline.layoutSizingVertical = 'FIXED'; } catch (e) {}
+    }
+
+    return wrap;
+  }
+
+  // --- Vertical tab row ------------------------------------------------------
+  async function makeVerticalRow(spec, label, active, variant) {
+    const cell = figma.createFrame();
+    cell.name = active ? 'Option-Active' : 'Option';
+    cell.layoutMode = 'HORIZONTAL';
+    cell.counterAxisAlignItems = 'CENTER';
+    cell.itemSpacing = 8;
+    cell.paddingLeft = cell.paddingRight = 12;
+    cell.paddingTop = cell.paddingBottom = 8;
+    cell.primaryAxisSizingMode = 'FIXED';
+    cell.counterAxisSizingMode = 'AUTO';
+    cell.cornerRadius = variant === 'Thinner' ? 6 : 0;
+
+    if (active) {
+      if (variant === 'Thinner') {
+        cell.fills = [paintForVar(required['brand/primary-subtle'] || required['state/disabled-bg'])];
+      } else {
+        // Thin: left brand bar, no full bg
+        cell.fills = [];
+        cell.strokes = [paintForVar(required['brand/primary'])];
+        cell.strokeWeight = 0; // we'll fake left bar via individual stroke
+        cell.strokeLeftWeight = 2;
+        cell.strokeAlign = 'INSIDE';
+      }
+    } else {
+      cell.fills = [];
+    }
+
+    const t = figma.createText();
+    const fStyle = styleByName[spec.font];
+    if (fStyle) await t.setTextStyleIdAsync(fStyle.id);
+    t.characters = label;
+    t.fills = [paintForVar(active ? required['brand/primary'] : required['text/secondary'])];
+    t.textAutoResize = 'WIDTH_AND_HEIGHT';
+    cell.appendChild(t);
+    return cell;
+  }
+
+  async function makeVerticalBar(variant, size) {
+    const spec = SIZE[size];
+    const wrap = figma.createComponent();
+    wrap.name = `Orientation=Vertical, Variant=${variant}, Size=${size}, Full Width=False`;
+    wrap.layoutMode = 'VERTICAL';
+    wrap.itemSpacing = variant === 'Thinner' ? 4 : 0;
+    wrap.primaryAxisSizingMode = 'AUTO';
+    wrap.counterAxisSizingMode = 'FIXED';
+    wrap.resize(VERTICAL_W, 1);
+    wrap.paddingLeft = wrap.paddingRight = variant === 'Thinner' ? 4 : 0;
+    wrap.paddingTop = wrap.paddingBottom = variant === 'Thinner' ? 4 : 0;
+    if (variant === 'Thinner') {
+      wrap.fills = [];
+      wrap.strokes = [paintForVar(required['border/default'])];
+      wrap.strokeWeight = 1; wrap.strokeAlign = 'INSIDE';
+      wrap.cornerRadius = 8;
+    } else {
+      wrap.fills = [];
+      // Thin: continuous right-side track behind rows
+      wrap.strokes = [paintForVar(required['border/default'])];
+      wrap.strokeWeight = 0; wrap.strokeLeftWeight = 1; wrap.strokeAlign = 'INSIDE';
+    }
+
+    for (let i = 0; i < LABELS.length; i++) {
+      const cell = await makeVerticalRow(spec, LABELS[i], i === ACTIVE_INDEX, variant);
+      wrap.appendChild(cell);
+      try { cell.layoutSizingHorizontal = 'FILL'; cell.layoutSizingVertical = 'HUG'; } catch (e) {}
+    }
+    return wrap;
+  }
+
+  // --- Build all variants ----------------------------------------------------
+  const allVariants = []; const meta = [];
+  const HSIZES = ['Medium', 'Large'];
+  const HVARIANTS = ['Bordered', 'Borderless', 'Filled'];
+  const VVARIANTS = ['Thinner', 'Thin'];
+  const FW = [false, true];
+
+  for (const sz of HSIZES) for (const v of HVARIANTS) for (const fw of FW) {
+    const c = await makeHorizontalBar(v, sz, fw);
+    allVariants.push(c); meta.push({ orient: 'Horizontal', variant: v, size: sz, fw });
+  }
+  for (const sz of HSIZES) for (const v of VVARIANTS) {
+    const c = await makeVerticalBar(v, sz);
+    allVariants.push(c); meta.push({ orient: 'Vertical', variant: v, size: sz, fw: false });
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Tabs'; compSet.layoutMode = 'NONE'; compSet.fills = [];
+
+  // --- Layout grid: rows = Size × FullWidth flag; cols = Orientation+Variant
+  // Top axis: 5 columns — H/Bordered, H/Borderless, H/Filled, V/Thinner, V/Thin
+  // Y axis (per Size group): two rows for FullWidth False/True (Horizontal),
+  //   single row for Vertical.
+  const PAD_LEFT = 220, PAD_TOP = 200, PAD_RIGHT = 56, PAD_BOT = 56;
+  const COL_H = 560, COL_V = 200, ROW_H_HORIZ = 110, ROW_H_VERT = 280, GROUP_GAP = 32;
+
+  // Column positions
+  const cols = [
+    { name: 'H/Bordered',   match: { orient: 'Horizontal', variant: 'Bordered'  }, w: COL_H },
+    { name: 'H/Borderless', match: { orient: 'Horizontal', variant: 'Borderless'}, w: COL_H },
+    { name: 'H/Filled',     match: { orient: 'Horizontal', variant: 'Filled'    }, w: COL_H },
+    { name: 'V/Thinner',    match: { orient: 'Vertical',   variant: 'Thinner'   }, w: COL_V },
+    { name: 'V/Thin',       match: { orient: 'Vertical',   variant: 'Thin'      }, w: COL_V },
+  ];
+  let cx = PAD_LEFT;
+  for (const c of cols) { c.x = cx; cx += c.w; }
+  const totalW = cx;
+
+  // Build rowGroups (per Size)
+  const rowGroups = [];
+  let cy = PAD_TOP;
+  for (const sz of HSIZES) {
+    const states = [
+      { name: 'Full Width = False', y: cy,                  height: ROW_H_HORIZ, fw: false, isVert: false },
+      { name: 'Full Width = True',  y: cy + ROW_H_HORIZ,    height: ROW_H_HORIZ, fw: true,  isVert: false },
+      { name: 'Vertical',           y: cy + ROW_H_HORIZ * 2, height: ROW_H_VERT, fw: false, isVert: true  },
+    ];
+    rowGroups.push({ name: `Size: ${sz}`, y: cy, states, sizeKey: sz });
+    cy += ROW_H_HORIZ * 2 + ROW_H_VERT + GROUP_GAP;
+  }
+
+  // Place variants
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i]; const m = meta[i];
+    const col = cols.find(c => c.match.orient === m.orient && c.match.variant === m.variant);
+    const rg = rowGroups.find(r => r.sizeKey === m.size);
+    if (!col || !rg) continue;
+    const st = m.orient === 'Vertical' ? rg.states[2]
+             : (m.fw ? rg.states[1] : rg.states[0]);
+    v.x = Math.round(col.x + (col.w - v.width) / 2);
+    v.y = Math.round(st.y + (st.height - v.height) / 2);
+  }
+  compSet.resize(totalW + PAD_RIGHT, cy + PAD_BOT);
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  // Decoration — adapt structure to decorateComponentSet API
+  const colGroups = [{ name: 'Orientation × Variant', x: PAD_LEFT, width: totalW - PAD_LEFT,
+    sizes: cols.map(c => ({ name: c.name, x: c.x, width: c.w })) }];
+
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Tabs', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Tabs (molecule) built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
 // DROPDOWN — Single + Multi-Chips + Multi-Inline merged
 //   Type: Single | Multi-Chips | Multi-Inline
 //   Size: Small | Default | Large
@@ -9855,6 +10151,8 @@ async function rebuildAll() {
       await buildSkeleton();
     } else if (figma.command === 'buildAccordion') {
       await buildAccordion();
+    } else if (figma.command === 'buildTabs2') {
+      await buildTabs2();
     } else if (figma.command === 'cleanupFallbackIcons') {
       await cleanupFallbackIcons();
     } else {

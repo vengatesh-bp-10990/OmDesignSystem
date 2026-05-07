@@ -1,0 +1,29 @@
+{
+  "name": "OM DS Bootstrap",
+  "id": "om-design-system-bootstrap",
+  "api": "1.0.0",
+  "main": "code.js",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": ["https://randomuser.me", "https://i.pravatar.cc", "https://www.gravatar.com"]
+  },
+  "menu": [
+    { "name": "Bootstrap Phase 1.1 (Foundations)", "command": "bootstrap" },
+    { "name": "Build Icon Components", "command": "buildIcons" },
+    { "name": "Build Button (Unified: Default/Split/Icon)", "command": "buildButton" },
+    { "name": "Build Checkbox", "command": "buildCheckbox" },
+    { "name": "Build Radio", "command": "buildRadio" },
+    { "name": "Build Toggle", "command": "buildToggle" },
+    { "name": "Build Badge", "command": "buildBadge" },
+    { "name": "Build Tooltip", "command": "buildTooltip" },
+    { "name": "Build Avatar (Single + Group)", "command": "buildAvatar" },
+    { "name": "Build Label", "command": "buildLabel" },
+    { "name": "Build Chip", "command": "buildChip" },
+    { "name": "Build TextField", "command": "buildTextField" },
+    { "name": "Build Textarea", "command": "buildTextarea" },
+    { "name": "Build Dropdown", "command": "buildDropdown" },
+    { "name": "Reset Text Styles", "command": "resetTextStyles" },
+    { "name": "Reset (Delete OM Collections)", "command": "reset" }
+  ]
+}

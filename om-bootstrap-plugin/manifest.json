@@ -49,6 +49,8 @@
     { "name": "Build Empty State (Molecule)", "command": "buildEmptyState" },
     { "name": "Build Page Header (Organism)", "command": "buildPageHeader" },
     { "name": "Build Top Nav Bar (Organism)", "command": "buildTopNavBar" },
+    { "name": "Build Form Layout (Organism)", "command": "buildFormLayout" },
+    { "name": "Build Data Table (Organism)", "command": "buildDataTable" },
     { "name": "Build Component Tokens (All — backfill aliases)", "command": "buildComponentTokens" },
     { "name": "Build All Wired (Single Build — all components → Component/X)", "command": "buildAllWired" },
     { "name": "Cleanup _glyph Fallback Icons", "command": "cleanupFallbackIcons" },

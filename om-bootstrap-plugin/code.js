@@ -12767,6 +12767,43 @@ const COMPONENT_TOKEN_SPECS = {
     'badge/text':         'brand/on-primary',
     'avatar/ring':        'border/default',
   },
+  'FormLayout': {
+    'surface':            'surface/card',
+    'surface/page':       'surface/base',
+    'border/section':     'border/default',
+    'text/section/title': 'text/primary',
+    'text/section/desc':  'text/secondary',
+    'text/required':      'status/danger',
+    'text/helper':        'text/secondary',
+    'divider':            'border/default',
+    'footer/bg':          'surface/base',
+    'footer/border':      'border/default',
+  },
+  'DataTable': {
+    'surface':              'surface/card',
+    'border/outer':         'border/default',
+    'header/bg':            'surface/base',
+    'header/text':          'text/secondary',
+    'header/icon':          'icon/subtle',
+    'header/border':        'border/default',
+    'row/bg/default':       'surface/card',
+    'row/bg/hover':         'state/disabled-bg',
+    'row/bg/selected':      'brand/primary-subtle',
+    'row/bg/zebra':         'surface/base',
+    'row/border':           'border/default',
+    'cell/text':            'text/primary',
+    'cell/text/secondary':  'text/secondary',
+    'cell/text/disabled':   'state/disabled-text',
+    'cell/icon':            'icon/default',
+    'toolbar/bg':           'surface/card',
+    'toolbar/border':       'border/default',
+    'toolbar/text':         'text/primary',
+    'toolbar/text/muted':   'text/secondary',
+    'footer/bg':            'surface/base',
+    'footer/border':        'border/default',
+    'footer/text':          'text/secondary',
+    'selection/checkbox':   'brand/primary',
+  },
 };
 
 async function buildComponentTokens() {
@@ -13436,6 +13473,848 @@ async function buildTopNavBar() {
 }
 
 // =============================================================================
+// FORM LAYOUT (Organism) — Phase 5
+// Web-app form layout: section title + description, fields in a grid (1 or 2
+// columns), helper text, footer with Cancel + Submit buttons.
+// Composes: Label, TextField, Textarea, Dropdown, Button (Primary + Secondary).
+// Variants: Columns = 1 | 2 (rows)
+//           Density = Default | Compact (cols)
+// = 4 variants. Width 720.
+// =============================================================================
+async function buildFormLayout() {
+  console.log('[OM DS] buildFormLayout started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens('FormLayout');
+
+  const flCol = (await figma.variables.getLocalVariableCollectionsAsync())
+    .find(c => c.name === 'Component/FormLayout');
+  const flVars = {};
+  if (flCol) {
+    const all = await figma.variables.getLocalVariablesAsync('COLOR');
+    for (const v of all) {
+      if (v.variableCollectionId === flCol.id) flVars[v.name] = v;
+    }
+  }
+  const FALLBACK = {
+    'surface': 'surface/card', 'surface/page': 'surface/base',
+    'border/section': 'border/default',
+    'text/section/title': 'text/primary', 'text/section/desc': 'text/secondary',
+    'text/required': 'status/danger', 'text/helper': 'text/secondary',
+    'divider': 'border/default',
+    'footer/bg': 'surface/base', 'footer/border': 'border/default',
+  };
+  const fl = (n) => flVars[n] || required[FALLBACK[n] || 'text/primary'];
+
+  const organismsPage = figma.root.children.find(p => p.name.includes('Organisms')) || figma.currentPage;
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'));
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms'));
+  await figma.setCurrentPageAsync(organismsPage);
+
+  const _exist = organismsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Form Layout');
+  if (_exist) _exist.remove();
+  for (const n of organismsPage.children.filter(c => c.type === 'FRAME' && c.name === 'Form Layout')) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+
+  const labelSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Label');
+  const tfSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'TextField');
+  const taSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Textarea');
+  const ddSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Dropdown');
+  const buttonSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Button');
+
+  function findLabel(state) {
+    if (!labelSet) return null;
+    return labelSet.children.find(c => new RegExp(`State=${state || 'Default'}`).test(c.name)) || labelSet.children[0];
+  }
+  function findTf(size) {
+    if (!tfSet) return null;
+    return tfSet.children.find(c => new RegExp(`Size=${size}`).test(c.name) && /State=Default/.test(c.name) && /Status=None/.test(c.name) && /Content=Empty/.test(c.name))
+        || tfSet.children[0];
+  }
+  function findTa(size) {
+    if (!taSet) return null;
+    return taSet.children.find(c => new RegExp(`Size=${size}`).test(c.name) && /State=Default/.test(c.name) && /Status=None/.test(c.name) && /Content=Empty/.test(c.name))
+        || taSet.children[0];
+  }
+  function findDd(size) {
+    if (!ddSet) return null;
+    return ddSet.children.find(c => /Type=Single/.test(c.name) && new RegExp(`Size=${size}`).test(c.name) && /State=Default/.test(c.name) && /Status=None/.test(c.name) && /Content=Empty/.test(c.name))
+        || ddSet.children[0];
+  }
+  function findButton(color, size) {
+    if (!buttonSet) return null;
+    return buttonSet.children.find(c => c.name === `Type=Default, Color=${color}, Size=${size}, State=Default`)
+        || buttonSet.children.find(c => c.name === `Type=Default, Color=${color}, Size=Default, State=Default`);
+  }
+  async function setText(node, txt) {
+    const t = node.findOne(n => n.type === 'TEXT');
+    if (!t) return;
+    try { await figma.loadFontAsync(t.fontName); } catch (e) {}
+    try { t.characters = txt; } catch (e) {}
+  }
+
+  const WIDTH = 720;
+
+  // Build a single field cell: Label on top + control under
+  async function makeField(labelText, control) {
+    const cell = figma.createFrame();
+    cell.name = 'Field';
+    cell.layoutMode = 'VERTICAL';
+    cell.primaryAxisSizingMode = 'AUTO';
+    cell.counterAxisSizingMode = 'FIXED';
+    cell.itemSpacing = 2;
+    cell.fills = [];
+    cell.resize(200, 1);
+
+    const lv = findLabel('Default');
+    if (lv) {
+      const li = lv.createInstance();
+      cell.appendChild(li);
+      try { li.layoutSizingHorizontal = 'HUG'; } catch (e) {}
+      await setText(li, labelText);
+    }
+    cell.appendChild(control);
+    try { control.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    return cell;
+  }
+
+  async function buildVariant(columns, density) {
+    const isCompact = density === 'Compact';
+    const fieldSize = isCompact ? 'Small' : 'Default';
+    const btnSize = isCompact ? 'Small' : 'Default';
+    const padX = isCompact ? 16 : 24;
+    const padY = isCompact ? 16 : 24;
+    const sectionGap = isCompact ? 16 : 20;
+    const fieldGap = isCompact ? 12 : 16;
+
+    const comp = figma.createComponent();
+    comp.name = `Columns=${columns}, Density=${density}`;
+    comp.layoutMode = 'VERTICAL';
+    comp.primaryAxisSizingMode = 'AUTO';
+    comp.counterAxisSizingMode = 'FIXED';
+    comp.itemSpacing = 0;
+    comp.fills = [paintForVar(fl('surface'))];
+    comp.strokes = [paintForVar(fl('border/section'))];
+    comp.strokeWeight = 1;
+    comp.strokeAlign = 'INSIDE';
+    comp.cornerRadius = 12;
+    comp.clipsContent = true;
+    comp.resize(WIDTH, 1);
+
+    // ---- Section header ---------------------------------------------------
+    const header = figma.createFrame();
+    header.name = 'Section Header';
+    header.layoutMode = 'VERTICAL';
+    header.primaryAxisSizingMode = 'AUTO';
+    header.counterAxisSizingMode = 'FIXED';
+    header.itemSpacing = 4;
+    header.paddingLeft = header.paddingRight = padX;
+    header.paddingTop = padY;
+    header.paddingBottom = sectionGap;
+    header.fills = [];
+    comp.appendChild(header);
+    try { header.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    const title = figma.createText();
+    const ts = styleByName['Heading/H5'];
+    if (ts) await title.setTextStyleIdAsync(ts.id);
+    title.characters = 'Account details';
+    title.fills = [paintForVar(fl('text/section/title'))];
+    header.appendChild(title);
+
+    const desc = figma.createText();
+    const ds = styleByName['Body/Small'];
+    if (ds) await desc.setTextStyleIdAsync(ds.id);
+    desc.characters = 'Provide your basic profile information. Fields marked with * are required.';
+    desc.fills = [paintForVar(fl('text/section/desc'))];
+    header.appendChild(desc);
+    try { desc.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    // ---- Body: field grid -------------------------------------------------
+    const body = figma.createFrame();
+    body.name = 'Body';
+    body.layoutMode = 'VERTICAL';
+    body.primaryAxisSizingMode = 'AUTO';
+    body.counterAxisSizingMode = 'FIXED';
+    body.itemSpacing = fieldGap;
+    body.paddingLeft = body.paddingRight = padX;
+    body.paddingTop = 0;
+    body.paddingBottom = padY;
+    body.fills = [];
+    comp.appendChild(body);
+    try { body.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    const fieldDefs = [
+      { type: 'tf', label: 'First name *' },
+      { type: 'tf', label: 'Last name *' },
+      { type: 'tf', label: 'Work email *' },
+      { type: 'dd', label: 'Country' },
+      { type: 'ta', label: 'Bio' },
+    ];
+
+    if (columns === 2) {
+      // Pair fields into rows of 2; Bio (textarea) spans full width on its own row
+      let i = 0;
+      while (i < fieldDefs.length) {
+        const def = fieldDefs[i];
+        if (def.type === 'ta') {
+          // Full-width row
+          const row = figma.createFrame();
+          row.name = 'Row';
+          row.layoutMode = 'HORIZONTAL';
+          row.primaryAxisSizingMode = 'FIXED';
+          row.counterAxisSizingMode = 'AUTO';
+          row.itemSpacing = fieldGap;
+          row.fills = [];
+          body.appendChild(row);
+          try { row.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+          const tav = findTa(fieldSize);
+          if (tav) {
+            const c = tav.createInstance();
+            const cell = await makeField(def.label, c);
+            row.appendChild(cell);
+            try { cell.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+          }
+          i++;
+        } else {
+          // Pair this with next non-ta
+          const next = fieldDefs[i + 1] && fieldDefs[i + 1].type !== 'ta' ? fieldDefs[i + 1] : null;
+          const row = figma.createFrame();
+          row.name = 'Row';
+          row.layoutMode = 'HORIZONTAL';
+          row.primaryAxisSizingMode = 'FIXED';
+          row.counterAxisSizingMode = 'AUTO';
+          row.itemSpacing = fieldGap;
+          row.fills = [];
+          body.appendChild(row);
+          try { row.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+          for (const d of [def, next].filter(Boolean)) {
+            const v = d.type === 'tf' ? findTf(fieldSize) : findDd(fieldSize);
+            if (v) {
+              const c = v.createInstance();
+              const cell = await makeField(d.label, c);
+              row.appendChild(cell);
+              try { cell.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+            }
+          }
+          i += next ? 2 : 1;
+        }
+      }
+    } else {
+      // 1 column: each field full-width
+      for (const def of fieldDefs) {
+        const v = def.type === 'tf' ? findTf(fieldSize)
+                : def.type === 'dd' ? findDd(fieldSize)
+                : findTa(fieldSize);
+        if (v) {
+          const c = v.createInstance();
+          const cell = await makeField(def.label, c);
+          body.appendChild(cell);
+          try { cell.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+        }
+      }
+    }
+
+    // ---- Footer: Cancel + Submit -----------------------------------------
+    const footer = figma.createFrame();
+    footer.name = 'Footer';
+    footer.layoutMode = 'HORIZONTAL';
+    footer.primaryAxisSizingMode = 'FIXED';
+    footer.counterAxisSizingMode = 'AUTO';
+    footer.primaryAxisAlignItems = 'MAX'; // right-align
+    footer.counterAxisAlignItems = 'CENTER';
+    footer.itemSpacing = 8;
+    footer.paddingLeft = footer.paddingRight = padX;
+    footer.paddingTop = footer.paddingBottom = isCompact ? 12 : 16;
+    footer.fills = [paintForVar(fl('footer/bg'))];
+    footer.strokes = [paintForVar(fl('footer/border'))];
+    footer.strokeWeight = 1;
+    footer.strokeAlign = 'INSIDE';
+    footer.strokeTopWeight = 1;
+    footer.strokeBottomWeight = 0;
+    footer.strokeLeftWeight = 0;
+    footer.strokeRightWeight = 0;
+    comp.appendChild(footer);
+    try { footer.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    const cancelV = findButton('Secondary', btnSize);
+    if (cancelV) {
+      const inst = cancelV.createInstance();
+      footer.appendChild(inst);
+      await setText(inst, 'Cancel');
+    }
+    const submitV = findButton('Primary', btnSize);
+    if (submitV) {
+      const inst = submitV.createInstance();
+      footer.appendChild(inst);
+      await setText(inst, 'Save changes');
+    }
+
+    return comp;
+  }
+
+  const COLS = ['1', '2'];
+  const DENSITIES = ['Default', 'Compact'];
+  const variants = [];
+  const grid = {};
+  for (const c of COLS) {
+    grid[c] = {};
+    for (const d of DENSITIES) {
+      const v = await buildVariant(c, d);
+      variants.push(v);
+      grid[c][d] = v;
+    }
+  }
+
+  const compSet = figma.combineAsVariants(variants, organismsPage);
+  compSet.name = 'Form Layout';
+  compSet.layoutMode = 'NONE';
+  compSet.fills = [paintForVar(fl('surface/page'))];
+  compSet.strokes = [paintForVar(fl('border/section'))];
+  compSet.strokeWeight = 1;
+  compSet.cornerRadius = 16;
+
+  const PAD_TOP = 100, PAD_LEFT = 200, PAD_RIGHT = 40, PAD_BOT = 40;
+  const COL_GAP = 48, ROW_GAP = 64;
+
+  const colW = {};
+  for (const d of DENSITIES) {
+    let m = 0;
+    for (const c of COLS) if (grid[c][d].width > m) m = grid[c][d].width;
+    colW[d] = m;
+  }
+  const colX = {}; let cx = PAD_LEFT;
+  for (const d of DENSITIES) { colX[d] = cx; cx += colW[d] + COL_GAP; }
+  const rowH = {};
+  for (const c of COLS) {
+    let m = 0;
+    for (const d of DENSITIES) if (grid[c][d].height > m) m = grid[c][d].height;
+    rowH[c] = m;
+  }
+  const rowY = {}; let cy = PAD_TOP;
+  for (const c of COLS) { rowY[c] = cy; cy += rowH[c] + ROW_GAP; }
+
+  for (const c of COLS) for (const d of DENSITIES) {
+    grid[c][d].x = colX[d];
+    grid[c][d].y = rowY[c];
+  }
+  compSet.resize(cx - COL_GAP + PAD_RIGHT, cy - ROW_GAP + PAD_BOT);
+  autoPositionBelow(organismsPage, compSet, 120);
+
+  const colGroups = [{
+    name: 'Density', x: PAD_LEFT, width: cx - COL_GAP - PAD_LEFT,
+    sizes: DENSITIES.map(d => ({ name: d, x: colX[d], width: colW[d] })),
+  }];
+  const rowGroups = COLS.map(c => ({
+    name: `${c} Column${c === '1' ? '' : 's'}`, y: rowY[c],
+    states: [{ name: '', y: rowY[c], height: rowH[c] }],
+  }));
+  await decorateComponentSet({
+    page: organismsPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Form Layout',
+    surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
+  console.log(`[OM DS] Form Layout variants built: ${variants.length}`);
+  figma.notify(`✅ Form Layout: ${variants.length} variants (Columns × Density).`);
+}
+
+// =============================================================================
+// DATA TABLE (Organism) — Phase 5
+// Web-app data table with toolbar, sortable header, body rows, footer.
+// Composes: Checkbox (selection), IconButton (sort/menu), Button (toolbar),
+// SearchBar, Pagination (footer), Avatar (sample cell), Badge (status).
+// Variants: Density = Default | Compact (rows)
+//           Layout  = Default | With-Selection (cols)
+// = 4 variants. Width 1080.
+// =============================================================================
+async function buildDataTable() {
+  console.log('[OM DS] buildDataTable started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens('DataTable');
+
+  const dtCol = (await figma.variables.getLocalVariableCollectionsAsync())
+    .find(c => c.name === 'Component/DataTable');
+  const dtVars = {};
+  if (dtCol) {
+    const all = await figma.variables.getLocalVariablesAsync('COLOR');
+    for (const v of all) {
+      if (v.variableCollectionId === dtCol.id) dtVars[v.name] = v;
+    }
+  }
+  const FALLBACK = {
+    'surface': 'surface/card', 'border/outer': 'border/default',
+    'header/bg': 'surface/base', 'header/text': 'text/secondary',
+    'header/icon': 'icon/subtle', 'header/border': 'border/default',
+    'row/bg/default': 'surface/card', 'row/bg/hover': 'state/disabled-bg',
+    'row/bg/selected': 'brand/primary-subtle', 'row/bg/zebra': 'surface/base',
+    'row/border': 'border/default',
+    'cell/text': 'text/primary', 'cell/text/secondary': 'text/secondary',
+    'cell/text/disabled': 'state/disabled-text', 'cell/icon': 'icon/default',
+    'toolbar/bg': 'surface/card', 'toolbar/border': 'border/default',
+    'toolbar/text': 'text/primary', 'toolbar/text/muted': 'text/secondary',
+    'footer/bg': 'surface/base', 'footer/border': 'border/default',
+    'footer/text': 'text/secondary', 'selection/checkbox': 'brand/primary',
+  };
+  const dt = (n) => dtVars[n] || required[FALLBACK[n] || 'text/primary'];
+
+  const organismsPage = figma.root.children.find(p => p.name.includes('Organisms')) || figma.currentPage;
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'));
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms'));
+  await figma.setCurrentPageAsync(organismsPage);
+
+  const _exist = organismsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Data Table');
+  if (_exist) _exist.remove();
+  for (const n of organismsPage.children.filter(c => c.type === 'FRAME' && c.name === 'Data Table')) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+
+  const checkboxSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Checkbox');
+  const iconBtnSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'IconButton');
+  const buttonSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Button');
+  const searchBarSet = moleculesPage && moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && (n.name === 'Search Bar' || n.name === 'SearchBar'));
+  const paginationSet = moleculesPage && moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Pagination');
+  const badgeSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Badge');
+  const avatarSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Avatar');
+
+  function findCheckbox(checked, state) {
+    if (!checkboxSet) return null;
+    const want = `Checked=${checked}`;
+    const wantState = `State=${state}`;
+    return checkboxSet.children.find(c => new RegExp(want).test(c.name) && new RegExp(wantState).test(c.name) && /Size=Small/.test(c.name))
+        || checkboxSet.children.find(c => new RegExp(want).test(c.name) && new RegExp(wantState).test(c.name))
+        || checkboxSet.children[0];
+  }
+  function findIconBtn(size) {
+    if (!iconBtnSet) return null;
+    return iconBtnSet.children.find(c => new RegExp(`Variant=Ghost`).test(c.name) && new RegExp(`Size=${size}`).test(c.name) && /State=Default/.test(c.name))
+        || iconBtnSet.children[0];
+  }
+  function findButton(color, size) {
+    if (!buttonSet) return null;
+    return buttonSet.children.find(c => c.name === `Type=Default, Color=${color}, Size=${size}, State=Default`)
+        || buttonSet.children[0];
+  }
+  function findSearchBar() {
+    if (!searchBarSet) return null;
+    return searchBarSet.children.find(c => /Size=Small/.test(c.name) && /State=Default/.test(c.name) && /Content=Empty/.test(c.name))
+        || searchBarSet.children[0];
+  }
+  function findPagination() {
+    if (!paginationSet) return null;
+    return paginationSet.children[0];
+  }
+  function findBadge(color) {
+    if (!badgeSet) return null;
+    return badgeSet.children.find(c => new RegExp(`Color=${color}`).test(c.name))
+        || badgeSet.children[0];
+  }
+  function findAvatar(size) {
+    if (!avatarSet) return null;
+    return avatarSet.children.find(c => new RegExp(`Size=${size}`).test(c.name)) || avatarSet.children[0];
+  }
+  async function setText(node, txt) {
+    const t = node.findOne(n => n.type === 'TEXT');
+    if (!t) return;
+    try { await figma.loadFontAsync(t.fontName); } catch (e) {}
+    try { t.characters = txt; } catch (e) {}
+  }
+
+  const WIDTH = 1080;
+  const SAMPLE_ROWS = [
+    { name: 'Aarav Mehta',    email: 'aarav@om.dev',    role: 'Admin',  status: 'Success' },
+    { name: 'Bianca Romano',  email: 'bianca@om.dev',   role: 'Editor', status: 'Info' },
+    { name: 'Chen Wei',       email: 'wei@om.dev',      role: 'Viewer', status: 'Warning' },
+    { name: 'Diana Schmidt',  email: 'diana@om.dev',    role: 'Editor', status: 'Success' },
+    { name: 'Ethan Brooks',   email: 'ethan@om.dev',    role: 'Viewer', status: 'Danger' },
+  ];
+
+  async function buildVariant(layout, density) {
+    const isCompact = density === 'Compact';
+    const hasSelection = layout === 'With-Selection';
+    const ROW_H = isCompact ? 40 : 52;
+    const HEAD_H = isCompact ? 36 : 44;
+    const cellPadX = 16;
+
+    const comp = figma.createComponent();
+    comp.name = `Layout=${layout}, Density=${density}`;
+    comp.layoutMode = 'VERTICAL';
+    comp.primaryAxisSizingMode = 'AUTO';
+    comp.counterAxisSizingMode = 'FIXED';
+    comp.itemSpacing = 0;
+    comp.fills = [paintForVar(dt('surface'))];
+    comp.strokes = [paintForVar(dt('border/outer'))];
+    comp.strokeWeight = 1;
+    comp.strokeAlign = 'INSIDE';
+    comp.cornerRadius = 12;
+    comp.clipsContent = true;
+    comp.resize(WIDTH, 1);
+
+    // ---- Toolbar ----------------------------------------------------------
+    const toolbar = figma.createFrame();
+    toolbar.name = 'Toolbar';
+    toolbar.layoutMode = 'HORIZONTAL';
+    toolbar.primaryAxisSizingMode = 'FIXED';
+    toolbar.counterAxisSizingMode = 'AUTO';
+    toolbar.primaryAxisAlignItems = 'SPACE_BETWEEN';
+    toolbar.counterAxisAlignItems = 'CENTER';
+    toolbar.itemSpacing = 12;
+    toolbar.paddingLeft = toolbar.paddingRight = cellPadX;
+    toolbar.paddingTop = toolbar.paddingBottom = isCompact ? 10 : 12;
+    toolbar.fills = [paintForVar(dt('toolbar/bg'))];
+    toolbar.strokes = [paintForVar(dt('toolbar/border'))];
+    toolbar.strokeWeight = 1;
+    toolbar.strokeAlign = 'INSIDE';
+    toolbar.strokeBottomWeight = 1;
+    toolbar.strokeTopWeight = toolbar.strokeLeftWeight = toolbar.strokeRightWeight = 0;
+    comp.appendChild(toolbar);
+    try { toolbar.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    const tbLeft = figma.createFrame();
+    tbLeft.layoutMode = 'HORIZONTAL';
+    tbLeft.primaryAxisSizingMode = 'AUTO';
+    tbLeft.counterAxisSizingMode = 'AUTO';
+    tbLeft.counterAxisAlignItems = 'CENTER';
+    tbLeft.itemSpacing = 6;
+    tbLeft.fills = [];
+    toolbar.appendChild(tbLeft);
+    const tbTitle = figma.createText();
+    const tbts = styleByName['Heading/H5'];
+    if (tbts) await tbTitle.setTextStyleIdAsync(tbts.id);
+    tbTitle.characters = 'Team members';
+    tbTitle.fills = [paintForVar(dt('toolbar/text'))];
+    tbLeft.appendChild(tbTitle);
+    const tbCount = figma.createText();
+    const tbcs = styleByName['Body/Small'];
+    if (tbcs) await tbCount.setTextStyleIdAsync(tbcs.id);
+    tbCount.characters = `· ${SAMPLE_ROWS.length} total`;
+    tbCount.fills = [paintForVar(dt('toolbar/text/muted'))];
+    tbLeft.appendChild(tbCount);
+
+    const tbRight = figma.createFrame();
+    tbRight.layoutMode = 'HORIZONTAL';
+    tbRight.primaryAxisSizingMode = 'AUTO';
+    tbRight.counterAxisSizingMode = 'AUTO';
+    tbRight.counterAxisAlignItems = 'CENTER';
+    tbRight.itemSpacing = 8;
+    tbRight.fills = [];
+    toolbar.appendChild(tbRight);
+    const sb = findSearchBar();
+    if (sb) {
+      const sbI = sb.createInstance();
+      tbRight.appendChild(sbI);
+      try { sbI.resize(220, sbI.height); } catch (e) {}
+    }
+    const addBtn = findButton('Primary', isCompact ? 'Small' : 'Default');
+    if (addBtn) {
+      const inst = addBtn.createInstance();
+      tbRight.appendChild(inst);
+      await setText(inst, 'Add member');
+    }
+
+    // ---- Header row -------------------------------------------------------
+    const cols = [
+      { key: 'name',   label: 'Name',   w: hasSelection ? 320 : 360 },
+      { key: 'email',  label: 'Email',  w: 280 },
+      { key: 'role',   label: 'Role',   w: 140 },
+      { key: 'status', label: 'Status', w: 140 },
+      { key: 'menu',   label: '',       w: 56 },
+    ];
+    const usableW = WIDTH - 2; // borders inside
+    const selW = hasSelection ? 48 : 0;
+    // Adjust last col to fill remaining width
+    const totalCols = cols.reduce((s, c) => s + c.w, 0);
+    const remaining = usableW - selW - totalCols;
+    if (remaining !== 0) cols[1].w += remaining;
+
+    const headerRow = figma.createFrame();
+    headerRow.name = 'Header';
+    headerRow.layoutMode = 'HORIZONTAL';
+    headerRow.primaryAxisSizingMode = 'FIXED';
+    headerRow.counterAxisSizingMode = 'FIXED';
+    headerRow.counterAxisAlignItems = 'CENTER';
+    headerRow.itemSpacing = 0;
+    headerRow.fills = [paintForVar(dt('header/bg'))];
+    headerRow.strokes = [paintForVar(dt('header/border'))];
+    headerRow.strokeWeight = 1;
+    headerRow.strokeAlign = 'INSIDE';
+    headerRow.strokeBottomWeight = 1;
+    headerRow.strokeTopWeight = headerRow.strokeLeftWeight = headerRow.strokeRightWeight = 0;
+    comp.appendChild(headerRow);
+    try { headerRow.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    headerRow.resize(WIDTH, HEAD_H);
+
+    if (hasSelection) {
+      const selCell = figma.createFrame();
+      selCell.layoutMode = 'HORIZONTAL';
+      selCell.primaryAxisAlignItems = 'CENTER';
+      selCell.counterAxisAlignItems = 'CENTER';
+      selCell.primaryAxisSizingMode = 'FIXED';
+      selCell.counterAxisSizingMode = 'FIXED';
+      selCell.resize(selW, HEAD_H);
+      selCell.fills = [];
+      headerRow.appendChild(selCell);
+      const cbV = findCheckbox('Unchecked', 'Default');
+      if (cbV) selCell.appendChild(cbV.createInstance());
+    }
+
+    for (const col of cols) {
+      const cell = figma.createFrame();
+      cell.name = `H · ${col.label || 'menu'}`;
+      cell.layoutMode = 'HORIZONTAL';
+      cell.primaryAxisSizingMode = 'FIXED';
+      cell.counterAxisSizingMode = 'FIXED';
+      cell.counterAxisAlignItems = 'CENTER';
+      cell.paddingLeft = cell.paddingRight = cellPadX;
+      cell.itemSpacing = 4;
+      cell.fills = [];
+      cell.resize(col.w, HEAD_H);
+      headerRow.appendChild(cell);
+      if (col.label) {
+        const tx = figma.createText();
+        const hs = styleByName['Label/Default'];
+        if (hs) await tx.setTextStyleIdAsync(hs.id);
+        tx.characters = col.label;
+        tx.fills = [paintForVar(dt('header/text'))];
+        cell.appendChild(tx);
+      }
+    }
+
+    // ---- Body rows --------------------------------------------------------
+    for (let i = 0; i < SAMPLE_ROWS.length; i++) {
+      const r = SAMPLE_ROWS[i];
+      const isSelected = hasSelection && i === 1; // sample selected row
+      const row = figma.createFrame();
+      row.name = `Row ${i + 1}`;
+      row.layoutMode = 'HORIZONTAL';
+      row.primaryAxisSizingMode = 'FIXED';
+      row.counterAxisSizingMode = 'FIXED';
+      row.counterAxisAlignItems = 'CENTER';
+      row.itemSpacing = 0;
+      row.fills = [paintForVar(isSelected ? dt('row/bg/selected') : dt('row/bg/default'))];
+      row.strokes = [paintForVar(dt('row/border'))];
+      row.strokeWeight = 1;
+      row.strokeAlign = 'INSIDE';
+      row.strokeBottomWeight = i === SAMPLE_ROWS.length - 1 ? 0 : 1;
+      row.strokeTopWeight = row.strokeLeftWeight = row.strokeRightWeight = 0;
+      comp.appendChild(row);
+      try { row.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+      row.resize(WIDTH, ROW_H);
+
+      if (hasSelection) {
+        const selCell = figma.createFrame();
+        selCell.layoutMode = 'HORIZONTAL';
+        selCell.primaryAxisAlignItems = 'CENTER';
+        selCell.counterAxisAlignItems = 'CENTER';
+        selCell.primaryAxisSizingMode = 'FIXED';
+        selCell.counterAxisSizingMode = 'FIXED';
+        selCell.resize(selW, ROW_H);
+        selCell.fills = [];
+        row.appendChild(selCell);
+        const cbV = findCheckbox(isSelected ? 'Checked' : 'Unchecked', 'Default');
+        if (cbV) selCell.appendChild(cbV.createInstance());
+      }
+
+      // Name cell — avatar + text
+      const nameCell = figma.createFrame();
+      nameCell.layoutMode = 'HORIZONTAL';
+      nameCell.primaryAxisSizingMode = 'FIXED';
+      nameCell.counterAxisSizingMode = 'FIXED';
+      nameCell.counterAxisAlignItems = 'CENTER';
+      nameCell.paddingLeft = nameCell.paddingRight = cellPadX;
+      nameCell.itemSpacing = 10;
+      nameCell.fills = [];
+      nameCell.resize(cols[0].w, ROW_H);
+      row.appendChild(nameCell);
+      const avV = findAvatar(isCompact ? 'XS' : 'Small');
+      if (avV) nameCell.appendChild(avV.createInstance());
+      const nameTx = figma.createText();
+      const nbs = styleByName['Body/Default'];
+      if (nbs) await nameTx.setTextStyleIdAsync(nbs.id);
+      nameTx.characters = r.name;
+      nameTx.fills = [paintForVar(dt('cell/text'))];
+      nameCell.appendChild(nameTx);
+
+      // Email cell
+      const emailCell = figma.createFrame();
+      emailCell.layoutMode = 'HORIZONTAL';
+      emailCell.primaryAxisSizingMode = 'FIXED';
+      emailCell.counterAxisSizingMode = 'FIXED';
+      emailCell.counterAxisAlignItems = 'CENTER';
+      emailCell.paddingLeft = emailCell.paddingRight = cellPadX;
+      emailCell.fills = [];
+      emailCell.resize(cols[1].w, ROW_H);
+      row.appendChild(emailCell);
+      const emTx = figma.createText();
+      const ems = styleByName['Body/Default'];
+      if (ems) await emTx.setTextStyleIdAsync(ems.id);
+      emTx.characters = r.email;
+      emTx.fills = [paintForVar(dt('cell/text/secondary'))];
+      emailCell.appendChild(emTx);
+
+      // Role cell
+      const roleCell = figma.createFrame();
+      roleCell.layoutMode = 'HORIZONTAL';
+      roleCell.primaryAxisSizingMode = 'FIXED';
+      roleCell.counterAxisSizingMode = 'FIXED';
+      roleCell.counterAxisAlignItems = 'CENTER';
+      roleCell.paddingLeft = roleCell.paddingRight = cellPadX;
+      roleCell.fills = [];
+      roleCell.resize(cols[2].w, ROW_H);
+      row.appendChild(roleCell);
+      const rlTx = figma.createText();
+      const rls = styleByName['Body/Default'];
+      if (rls) await rlTx.setTextStyleIdAsync(rls.id);
+      rlTx.characters = r.role;
+      rlTx.fills = [paintForVar(dt('cell/text'))];
+      roleCell.appendChild(rlTx);
+
+      // Status cell — Badge instance
+      const statusCell = figma.createFrame();
+      statusCell.layoutMode = 'HORIZONTAL';
+      statusCell.primaryAxisSizingMode = 'FIXED';
+      statusCell.counterAxisSizingMode = 'FIXED';
+      statusCell.counterAxisAlignItems = 'CENTER';
+      statusCell.paddingLeft = statusCell.paddingRight = cellPadX;
+      statusCell.fills = [];
+      statusCell.resize(cols[3].w, ROW_H);
+      row.appendChild(statusCell);
+      const bgV = findBadge(r.status);
+      if (bgV) {
+        const bi = bgV.createInstance();
+        statusCell.appendChild(bi);
+        await setText(bi, r.status === 'Success' ? 'Active' : r.status === 'Info' ? 'Pending' : r.status === 'Warning' ? 'Idle' : 'Suspended');
+      }
+
+      // Menu cell — IconButton
+      const menuCell = figma.createFrame();
+      menuCell.layoutMode = 'HORIZONTAL';
+      menuCell.primaryAxisAlignItems = 'CENTER';
+      menuCell.counterAxisAlignItems = 'CENTER';
+      menuCell.primaryAxisSizingMode = 'FIXED';
+      menuCell.counterAxisSizingMode = 'FIXED';
+      menuCell.resize(cols[4].w, ROW_H);
+      menuCell.fills = [];
+      row.appendChild(menuCell);
+      const ibV = findIconBtn(isCompact ? 'Small' : 'Default');
+      if (ibV) menuCell.appendChild(ibV.createInstance());
+    }
+
+    // ---- Footer (pagination) ---------------------------------------------
+    const footer = figma.createFrame();
+    footer.name = 'Footer';
+    footer.layoutMode = 'HORIZONTAL';
+    footer.primaryAxisSizingMode = 'FIXED';
+    footer.counterAxisSizingMode = 'AUTO';
+    footer.primaryAxisAlignItems = 'SPACE_BETWEEN';
+    footer.counterAxisAlignItems = 'CENTER';
+    footer.itemSpacing = 12;
+    footer.paddingLeft = footer.paddingRight = cellPadX;
+    footer.paddingTop = footer.paddingBottom = isCompact ? 8 : 12;
+    footer.fills = [paintForVar(dt('footer/bg'))];
+    footer.strokes = [paintForVar(dt('footer/border'))];
+    footer.strokeWeight = 1;
+    footer.strokeAlign = 'INSIDE';
+    footer.strokeTopWeight = 1;
+    footer.strokeBottomWeight = footer.strokeLeftWeight = footer.strokeRightWeight = 0;
+    comp.appendChild(footer);
+    try { footer.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    const ftLeft = figma.createText();
+    const fls = styleByName['Body/Small'];
+    if (fls) await ftLeft.setTextStyleIdAsync(fls.id);
+    ftLeft.characters = `Showing 1–${SAMPLE_ROWS.length} of ${SAMPLE_ROWS.length}`;
+    ftLeft.fills = [paintForVar(dt('footer/text'))];
+    footer.appendChild(ftLeft);
+
+    const pgV = findPagination();
+    if (pgV) footer.appendChild(pgV.createInstance());
+
+    return comp;
+  }
+
+  const LAYOUTS = ['Default', 'With-Selection'];
+  const DENSITIES = ['Default', 'Compact'];
+  const variants = [];
+  const grid = {};
+  for (const l of LAYOUTS) {
+    grid[l] = {};
+    for (const d of DENSITIES) {
+      const v = await buildVariant(l, d);
+      variants.push(v);
+      grid[l][d] = v;
+    }
+  }
+
+  const compSet = figma.combineAsVariants(variants, organismsPage);
+  compSet.name = 'Data Table';
+  compSet.layoutMode = 'NONE';
+  compSet.fills = [paintForVar(dt('surface'))];
+  compSet.strokes = [paintForVar(dt('border/outer'))];
+  compSet.strokeWeight = 1;
+  compSet.cornerRadius = 16;
+
+  const PAD_TOP = 100, PAD_LEFT = 200, PAD_RIGHT = 40, PAD_BOT = 40;
+  const COL_GAP = 64, ROW_GAP = 64;
+
+  const colW = {};
+  for (const d of DENSITIES) {
+    let m = 0;
+    for (const l of LAYOUTS) if (grid[l][d].width > m) m = grid[l][d].width;
+    colW[d] = m;
+  }
+  const colX = {}; let cx = PAD_LEFT;
+  for (const d of DENSITIES) { colX[d] = cx; cx += colW[d] + COL_GAP; }
+  const rowH = {};
+  for (const l of LAYOUTS) {
+    let m = 0;
+    for (const d of DENSITIES) if (grid[l][d].height > m) m = grid[l][d].height;
+    rowH[l] = m;
+  }
+  const rowY = {}; let cy = PAD_TOP;
+  for (const l of LAYOUTS) { rowY[l] = cy; cy += rowH[l] + ROW_GAP; }
+
+  for (const l of LAYOUTS) for (const d of DENSITIES) {
+    grid[l][d].x = colX[d];
+    grid[l][d].y = rowY[l];
+  }
+  compSet.resize(cx - COL_GAP + PAD_RIGHT, cy - ROW_GAP + PAD_BOT);
+  autoPositionBelow(organismsPage, compSet, 120);
+
+  const colGroups = [{
+    name: 'Density', x: PAD_LEFT, width: cx - COL_GAP - PAD_LEFT,
+    sizes: DENSITIES.map(d => ({ name: d, x: colX[d], width: colW[d] })),
+  }];
+  const rowGroups = LAYOUTS.map(l => ({
+    name: l, y: rowY[l],
+    states: [{ name: '', y: rowY[l], height: rowH[l] }],
+  }));
+  await decorateComponentSet({
+    page: organismsPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Data Table',
+    surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
+  console.log(`[OM DS] Data Table variants built: ${variants.length}`);
+  figma.notify(`✅ Data Table: ${variants.length} variants (Layout × Density).`);
+}
+
+// =============================================================================
 // BUILD ALL WIRED — single command that:
 //   1. Ensures all Component/{Name} collections + aliases exist.
 //   2. Rebuilds every component in dependency order so layers bind directly to
@@ -13493,6 +14372,8 @@ async function buildAllWired() {
     { name: 'EmptyState',      fn: typeof buildEmptyState      === 'function' ? buildEmptyState      : null },
     { name: 'PageHeader',      fn: typeof buildPageHeader      === 'function' ? buildPageHeader      : null },
     { name: 'TopNavBar',       fn: typeof buildTopNavBar       === 'function' ? buildTopNavBar       : null },
+    { name: 'FormLayout',      fn: typeof buildFormLayout      === 'function' ? buildFormLayout      : null },
+    { name: 'DataTable',       fn: typeof buildDataTable       === 'function' ? buildDataTable       : null },
   ];
 
   const ok = []; const failed = [];
@@ -13608,6 +14489,10 @@ async function buildAllWired() {
       await buildPageHeader();
     } else if (figma.command === 'buildTopNavBar') {
       await buildTopNavBar();
+    } else if (figma.command === 'buildFormLayout') {
+      await buildFormLayout();
+    } else if (figma.command === 'buildDataTable') {
+      await buildDataTable();
     } else if (figma.command === 'cleanupFallbackIcons') {
       await cleanupFallbackIcons();
     } else {

@@ -6509,7 +6509,7 @@ async function buildSpinner() {
     track.fills = [];
     track.strokes = [paintForVar(trackVar)];
     track.strokeWeight = weight;
-    track.strokeAlign = 'CENTER';
+    track.strokeAlign = 'INSIDE';
     wrap.appendChild(track);
 
     // Active arc — donut sector (filled): outer radius = d/2, inner radius = d/2 - weight.

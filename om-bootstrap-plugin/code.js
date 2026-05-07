@@ -13564,11 +13564,12 @@ async function buildFormLayout() {
     const cell = figma.createFrame();
     cell.name = 'Field';
     cell.layoutMode = 'VERTICAL';
-    cell.primaryAxisSizingMode = 'AUTO';
-    cell.counterAxisSizingMode = 'FIXED';
     cell.itemSpacing = 2;
     cell.fills = [];
     cell.resize(200, 1);
+    // Re-apply AFTER resize: hug height, fixed width (parent will FILL it).
+    cell.counterAxisSizingMode = 'FIXED';
+    cell.primaryAxisSizingMode = 'AUTO';
 
     const lv = findLabel('Default');
     if (lv) {

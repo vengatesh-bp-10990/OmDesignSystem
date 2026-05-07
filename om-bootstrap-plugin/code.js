@@ -5472,9 +5472,13 @@ function paintForVar(varRef) {
 
 function bindIconColorForm(inst, colorVar) {
   if (!inst || !colorVar) return;
+  const VECTOR_TYPES = new Set(['VECTOR', 'STAR', 'LINE', 'POLYGON', 'ELLIPSE', 'RECTANGLE', 'BOOLEAN_OPERATION']);
   const apply = (n) => {
-    if ('fills' in n && Array.isArray(n.fills) && n.fills.length > 0) n.fills = [paintForVar(colorVar)];
-    if ('strokes' in n && Array.isArray(n.strokes) && n.strokes.length > 0) n.strokes = [paintForVar(colorVar)];
+    // Only recolor leaf vector-like nodes; never paint wrapper FRAME/GROUP/COMPONENT/INSTANCE
+    if (VECTOR_TYPES.has(n.type)) {
+      if ('fills'   in n && Array.isArray(n.fills)   && n.fills.length   > 0) n.fills   = [paintForVar(colorVar)];
+      if ('strokes' in n && Array.isArray(n.strokes) && n.strokes.length > 0) n.strokes = [paintForVar(colorVar)];
+    }
     if ('children' in n) for (const c of n.children) apply(c);
   };
   try { apply(inst); } catch (e) {}
@@ -7052,9 +7056,11 @@ async function buildDropdownMenu() {
       const ic = searchIc.createInstance();
       ic.name = 'Search Icon';
       ic.resize(14, 14);
-      bindIconColorForm(ic, mode === 'Active' || mode === 'Filled'
-        ? (required['icon/default'] || required['text/primary'])
-        : (required['icon/subtle']  || required['text/secondary']));
+      // Match the placeholder/text color of this state, not icon/default
+      const iconColor = mode === 'Filled'
+        ? required['text/primary']
+        : (mode === 'Active' ? required['brand/primary'] : required['text/secondary']);
+      bindIconColorForm(ic, iconColor);
       row.appendChild(ic);
     }
     const t = figma.createText();
@@ -7078,7 +7084,7 @@ async function buildDropdownMenu() {
       const x = clearIc.createInstance();
       x.name = 'Clear';
       x.resize(14, 14);
-      bindIconColorForm(x, required['icon/subtle'] || required['text/secondary']);
+      bindIconColorForm(x, required['text/secondary']);
       row.appendChild(x);
     }
     return row;

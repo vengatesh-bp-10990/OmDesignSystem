@@ -8144,7 +8144,135 @@ async function buildTabs() {
     componentName: 'Tab Item', surfaceVar: required['surface/card'], borderVar: required['border/default'],
   });
 
-  figma.notify(`✅ Tab Item built: ${allVariants.length} variants.`);
+  // ---------------------------------------------------------------------------
+  // Tab Bar Examples — composed rows that demonstrate real usage of Tab Item.
+  // Three example bars (Line / Boxy / Pill) using instances of the component
+  // set. Active tab is index 0 to match reference designs.
+  // ---------------------------------------------------------------------------
+  function findTabVariant(style, size, state) {
+    return allVariants.find(v => v.name === `Style=${style}, Size=${size}, State=${state}`);
+  }
+  function setTabInstanceProps(inst, opts) {
+    try {
+      const props = {};
+      if (propIds.icon)  props['Has Leading Icon'] = !!opts.icon;
+      if (propIds.badge) props['Has Badge']        = !!opts.badge;
+      if (Object.keys(props).length) inst.setProperties(props);
+    } catch (e) {}
+  }
+
+  async function makeTabBar(style, labels, opts) {
+    opts = opts || {};
+    const size = 'Default';
+    const wrap = figma.createFrame();
+    wrap.name = `${style} Tab Bar`;
+    wrap.layoutMode = 'VERTICAL';
+    wrap.primaryAxisSizingMode = 'AUTO';
+    wrap.counterAxisSizingMode = 'AUTO';
+    wrap.itemSpacing = 0;
+    wrap.fills = [];
+
+    // Row of tab instances
+    const row = figma.createFrame();
+    row.name = 'Tabs';
+    row.layoutMode = 'HORIZONTAL';
+    row.primaryAxisSizingMode = 'AUTO';
+    row.counterAxisSizingMode = 'AUTO';
+    row.counterAxisAlignItems = 'CENTER';
+    row.itemSpacing = style === 'Line' ? 8 : 4;
+    if (style === 'Pill') {
+      row.fills = [paintForVar(required['state/disabled-bg'])];
+      row.cornerRadius = 999;
+      row.paddingLeft = row.paddingRight = 4;
+      row.paddingTop = row.paddingBottom = 4;
+    } else {
+      row.fills = [];
+      row.paddingLeft = row.paddingRight = 0;
+      row.paddingTop = row.paddingBottom = 0;
+    }
+    wrap.appendChild(row);
+
+    for (let i = 0; i < labels.length; i++) {
+      const isActive = (i === 0);
+      const variant = findTabVariant(style, size, isActive ? 'Active' : 'Default');
+      if (!variant) continue;
+      const inst = variant.createInstance();
+      inst.name = labels[i];
+      // Set the visible label by writing to the inner text node.
+      const txt = inst.findOne(n => n.type === 'TEXT');
+      if (txt) {
+        try {
+          const fs = styleByName[size === 'Large' ? 'Body/Default' : 'Body/Small'];
+          if (fs) await txt.setTextStyleIdAsync(fs.id);
+          txt.characters = labels[i];
+        } catch (e) {}
+      }
+      setTabInstanceProps(inst, { icon: false, badge: !!(opts.activeBadge && isActive && style === 'Pill') });
+      row.appendChild(inst);
+    }
+
+    // Line style needs a full-width 1px baseline so the active underline
+    // visually sits above a continuous track, like the reference.
+    if (style === 'Line') {
+      const baseline = figma.createFrame();
+      baseline.name = 'Baseline';
+      baseline.fills = [paintForVar(required['border/default'])];
+      baseline.resize(row.width, 1);
+      wrap.appendChild(baseline);
+      try { baseline.layoutSizingHorizontal = 'FILL'; baseline.layoutSizingVertical = 'FIXED'; } catch (e) {}
+    }
+    return wrap;
+  }
+
+  const examplesWrap = figma.createFrame();
+  examplesWrap.name = 'Tab Bar Examples';
+  examplesWrap.layoutMode = 'VERTICAL';
+  examplesWrap.itemSpacing = 40;
+  examplesWrap.paddingLeft = examplesWrap.paddingRight = 32;
+  examplesWrap.paddingTop = examplesWrap.paddingBottom = 32;
+  examplesWrap.primaryAxisSizingMode = 'AUTO';
+  examplesWrap.counterAxisSizingMode = 'AUTO';
+  examplesWrap.fills = [paintForVar(required['surface/card'])];
+  examplesWrap.strokes = [paintForVar(required['border/default'])];
+  examplesWrap.strokeWeight = 1; examplesWrap.cornerRadius = 12;
+  moleculesPage.appendChild(examplesWrap);
+
+  // Heading
+  const exTitle = figma.createText();
+  if (styleByName['Heading/H4']) await exTitle.setTextStyleIdAsync(styleByName['Heading/H4'].id);
+  exTitle.characters = 'Tab Bar Examples';
+  exTitle.fills = [paintForVar(required['text/primary'])];
+  examplesWrap.appendChild(exTitle);
+
+  // Line
+  const lineLabel = figma.createText();
+  if (styleByName['Label/Default']) await lineLabel.setTextStyleIdAsync(styleByName['Label/Default'].id);
+  lineLabel.characters = 'Line';
+  lineLabel.fills = [paintForVar(required['text/secondary'])];
+  examplesWrap.appendChild(lineLabel);
+  examplesWrap.appendChild(await makeTabBar('Line', ['Tab Text 1', 'Tab Text 2', 'Tab Text 3', 'Tab Text 4', 'Tab Text 5']));
+
+  // Boxy
+  const boxyLabel = figma.createText();
+  if (styleByName['Label/Default']) await boxyLabel.setTextStyleIdAsync(styleByName['Label/Default'].id);
+  boxyLabel.characters = 'Boxy';
+  boxyLabel.fills = [paintForVar(required['text/secondary'])];
+  examplesWrap.appendChild(boxyLabel);
+  examplesWrap.appendChild(await makeTabBar('Boxy', ['Tab Text 1', 'Tab Text 2', 'Tab Text 3', 'Tab Text 4', 'Tab Text 5']));
+
+  // Pill
+  const pillLabel = figma.createText();
+  if (styleByName['Label/Default']) await pillLabel.setTextStyleIdAsync(styleByName['Label/Default'].id);
+  pillLabel.characters = 'Pill';
+  pillLabel.fills = [paintForVar(required['text/secondary'])];
+  examplesWrap.appendChild(pillLabel);
+  examplesWrap.appendChild(await makeTabBar('Pill', ['Tab Text', 'Tab Text', 'Tab Text', 'Tab Text', 'Tab Text'], { activeBadge: true }));
+
+  // Place examples below the variant matrix
+  examplesWrap.x = compSet.x;
+  examplesWrap.y = compSet.y + compSet.height + 60;
+
+  figma.notify(`✅ Tab Item built: ${allVariants.length} variants + 3 example bars.`);
 }
 
 

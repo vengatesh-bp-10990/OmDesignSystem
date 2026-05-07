@@ -8022,6 +8022,7 @@ async function buildTabs() {
     wrap.layoutMode = 'VERTICAL';
     wrap.primaryAxisSizingMode = 'AUTO';
     wrap.counterAxisSizingMode = 'AUTO';
+    wrap.counterAxisAlignItems = 'CENTER';
     wrap.itemSpacing = 0;
     wrap.fills = [];
 
@@ -9443,7 +9444,7 @@ async function buildAccordion() {
 // Active option is the first; subsequent options are Default state.
 // =============================================================================
 async function buildTabs2() {
-  console.log('[OM DS] buildTabs2 (Tabs molecule) started');
+  console.log('[OM DS] buildTabs2 (Tabs molecule, instance-based) started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
   const required = await resolveFormTokens();
 
@@ -9462,71 +9463,38 @@ async function buildTabs2() {
   await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
   await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
 
-  // Per-size dimensions (mirrors Blade Medium/Large semantics).
-  const SIZE = {
-    Medium: { h: 32, padX: 14, padY: 6, font: 'Body/Small',   indicatorH: 2, gap: 8,  rowH: 36 },
-    Large:  { h: 40, padX: 16, padY: 8, font: 'Body/Default', indicatorH: 2, gap: 8,  rowH: 44 },
-  };
+  // Resolve the Tab Item atom — required for instancing.
+  const tabSet = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Tab Item');
+  if (!tabSet) {
+    figma.notify('⚠️ "Tab Item" component set not found on Molecules page. Run "Build Tabs (Molecule)" first.');
+    return;
+  }
+  function findTab(style, size, state) {
+    return tabSet.children.find(c => c.name === `Style=${style}, Size=${size}, State=${state}`);
+  }
 
   const LABELS = ['Option', 'Option', 'Option', 'Option', 'Option'];
   const ACTIVE_INDEX = 0;
-  const HORIZONTAL_W = 520;
-  const VERTICAL_W = 160;
+  const HORIZONTAL_W = 560;
+  const VERTICAL_W = 200;
 
-  // --- Horizontal tab cell ---------------------------------------------------
-  async function makeHorizontalCell(spec, label, active, variant, fullWidth) {
-    const cell = figma.createFrame();
-    cell.name = active ? `Option-Active` : `Option`;
-    cell.layoutMode = 'VERTICAL';
-    cell.itemSpacing = 0;
-    cell.primaryAxisSizingMode = 'AUTO';
-    cell.counterAxisSizingMode = 'AUTO';
-    cell.fills = [];
+  // Molecule Size → Tab Item Size mapping
+  const SIZE_MAP   = { Medium: 'Default', Large: 'Large' };
+  const H_STYLE    = { Bordered: 'Line',  Borderless: 'Line', Filled: 'Boxy' };
+  const V_STYLE    = { Thinner:  'Boxy',  Thin: 'Line' };
 
-    const row = figma.createFrame();
-    row.name = 'Tab';
-    row.layoutMode = 'HORIZONTAL';
-    row.primaryAxisAlignItems = 'CENTER';
-    row.counterAxisAlignItems = 'CENTER';
-    row.paddingLeft = row.paddingRight = spec.padX;
-    row.paddingTop = row.paddingBottom = spec.padY;
-    row.itemSpacing = 6;
-    row.primaryAxisSizingMode = 'AUTO';
-    row.counterAxisSizingMode = 'FIXED';
-    row.resize(row.width, spec.h);
-    row.cornerRadius = variant === 'Filled' ? 6 : 0;
-    if (variant === 'Filled' && active) {
-      row.fills = [paintForVar(required['surface/card'])];
-      row.strokes = [paintForVar(required['border/default'])];
-      row.strokeWeight = 1; row.strokeAlign = 'INSIDE';
-    } else {
-      row.fills = [];
-    }
-    cell.appendChild(row);
-    try { row.layoutSizingHorizontal = 'FILL'; row.layoutSizingVertical = 'FIXED'; } catch (e) {}
-
-    const t = figma.createText();
-    const fStyle = styleByName[spec.font];
-    if (fStyle) await t.setTextStyleIdAsync(fStyle.id);
-    t.characters = label;
-    t.fills = [paintForVar(active ? required['brand/primary'] : required['text/secondary'])];
-    t.textAutoResize = 'WIDTH_AND_HEIGHT';
-    row.appendChild(t);
-
-    // Underline indicator (Bordered + Borderless variants only)
-    if (variant !== 'Filled') {
-      const ind = figma.createFrame();
-      ind.name = 'Indicator';
-      ind.fills = active ? [paintForVar(required['brand/primary'])] : [];
-      ind.resize(cell.width, spec.indicatorH);
-      cell.appendChild(ind);
-      try { ind.layoutSizingHorizontal = 'FILL'; ind.layoutSizingVertical = 'FIXED'; } catch (e) {}
-    }
-    return cell;
+  async function setTabLabel(inst, label) {
+    const t = inst.findOne(n => n.type === 'TEXT');
+    if (!t) return;
+    try { await figma.loadFontAsync(t.fontName); } catch (e) {}
+    try { t.characters = label; } catch (e) {}
   }
 
+  // ---------------- Horizontal -----------------
   async function makeHorizontalBar(variant, size, fullWidth) {
-    const spec = SIZE[size];
+    const tabSize  = SIZE_MAP[size];
+    const tabStyle = H_STYLE[variant];
+
     const wrap = figma.createComponent();
     wrap.name = `Orientation=Horizontal, Variant=${variant}, Size=${size}, Full Width=${fullWidth}`;
     wrap.layoutMode = 'VERTICAL';
@@ -9536,15 +9504,12 @@ async function buildTabs2() {
     wrap.counterAxisSizingMode = 'FIXED';
     wrap.resize(HORIZONTAL_W, 1);
 
-    // Tab row
     const row = figma.createFrame();
     row.name = 'Tabs Row';
     row.layoutMode = 'HORIZONTAL';
     row.itemSpacing = variant === 'Filled' ? 4 : 0;
-    row.primaryAxisSizingMode = 'FIXED';
-    row.counterAxisSizingMode = 'AUTO';
     row.counterAxisAlignItems = 'CENTER';
-    row.primaryAxisAlignItems = fullWidth ? 'CENTER' : 'MIN';
+    row.primaryAxisAlignItems = 'MIN';
     if (variant === 'Filled') {
       row.fills = [paintForVar(required['state/disabled-bg'])];
       row.cornerRadius = 8;
@@ -9557,14 +9522,19 @@ async function buildTabs2() {
     try { row.layoutSizingHorizontal = 'FILL'; row.layoutSizingVertical = 'HUG'; } catch (e) {}
 
     for (let i = 0; i < LABELS.length; i++) {
-      const cell = await makeHorizontalCell(spec, LABELS[i], i === ACTIVE_INDEX, variant, fullWidth);
-      row.appendChild(cell);
-      if (fullWidth) {
-        try { cell.layoutSizingHorizontal = 'FILL'; } catch (e) {}
-      }
+      const isActive = i === ACTIVE_INDEX;
+      const variantNode = findTab(tabStyle, tabSize, isActive ? 'Active' : 'Default');
+      if (!variantNode) continue;
+      const inst = variantNode.createInstance();
+      inst.name = isActive ? 'Tab Item · Active' : 'Tab Item';
+      row.appendChild(inst);
+      try {
+        inst.layoutSizingHorizontal = fullWidth ? 'FILL' : 'HUG';
+        inst.layoutSizingVertical   = 'HUG';
+      } catch (e) {}
+      await setTabLabel(inst, LABELS[i]);
     }
 
-    // Bordered: continuous bottom border under the row (1px line)
     if (variant === 'Bordered') {
       const baseline = figma.createFrame();
       baseline.name = 'Baseline';
@@ -9573,50 +9543,14 @@ async function buildTabs2() {
       wrap.appendChild(baseline);
       try { baseline.layoutSizingHorizontal = 'FILL'; baseline.layoutSizingVertical = 'FIXED'; } catch (e) {}
     }
-
     return wrap;
   }
 
-  // --- Vertical tab row ------------------------------------------------------
-  async function makeVerticalRow(spec, label, active, variant) {
-    const cell = figma.createFrame();
-    cell.name = active ? 'Option-Active' : 'Option';
-    cell.layoutMode = 'HORIZONTAL';
-    cell.counterAxisAlignItems = 'CENTER';
-    cell.itemSpacing = 8;
-    cell.paddingLeft = cell.paddingRight = 12;
-    cell.paddingTop = cell.paddingBottom = 8;
-    cell.primaryAxisSizingMode = 'FIXED';
-    cell.counterAxisSizingMode = 'AUTO';
-    cell.cornerRadius = variant === 'Thinner' ? 6 : 0;
-
-    if (active) {
-      if (variant === 'Thinner') {
-        cell.fills = [paintForVar(required['brand/primary-subtle'] || required['state/disabled-bg'])];
-      } else {
-        // Thin: left brand bar, no full bg
-        cell.fills = [];
-        cell.strokes = [paintForVar(required['brand/primary'])];
-        cell.strokeWeight = 0; // we'll fake left bar via individual stroke
-        cell.strokeLeftWeight = 2;
-        cell.strokeAlign = 'INSIDE';
-      }
-    } else {
-      cell.fills = [];
-    }
-
-    const t = figma.createText();
-    const fStyle = styleByName[spec.font];
-    if (fStyle) await t.setTextStyleIdAsync(fStyle.id);
-    t.characters = label;
-    t.fills = [paintForVar(active ? required['brand/primary'] : required['text/secondary'])];
-    t.textAutoResize = 'WIDTH_AND_HEIGHT';
-    cell.appendChild(t);
-    return cell;
-  }
-
+  // ---------------- Vertical -----------------
   async function makeVerticalBar(variant, size) {
-    const spec = SIZE[size];
+    const tabSize  = SIZE_MAP[size];
+    const tabStyle = V_STYLE[variant];
+
     const wrap = figma.createComponent();
     wrap.name = `Orientation=Vertical, Variant=${variant}, Size=${size}, Full Width=False`;
     wrap.layoutMode = 'VERTICAL';
@@ -9624,31 +9558,44 @@ async function buildTabs2() {
     wrap.primaryAxisSizingMode = 'AUTO';
     wrap.counterAxisSizingMode = 'FIXED';
     wrap.resize(VERTICAL_W, 1);
-    wrap.paddingLeft = wrap.paddingRight = variant === 'Thinner' ? 4 : 0;
-    wrap.paddingTop = wrap.paddingBottom = variant === 'Thinner' ? 4 : 0;
+
     if (variant === 'Thinner') {
       wrap.fills = [];
       wrap.strokes = [paintForVar(required['border/default'])];
       wrap.strokeWeight = 1; wrap.strokeAlign = 'INSIDE';
       wrap.cornerRadius = 8;
+      wrap.paddingLeft = wrap.paddingRight = 4;
+      wrap.paddingTop = wrap.paddingBottom = 4;
     } else {
+      // Thin: continuous 1px left rail
       wrap.fills = [];
-      // Thin: continuous right-side track behind rows
       wrap.strokes = [paintForVar(required['border/default'])];
-      wrap.strokeWeight = 0; wrap.strokeLeftWeight = 1; wrap.strokeAlign = 'INSIDE';
+      wrap.strokeAlign = 'INSIDE';
+      wrap.strokeLeftWeight = 1;
+      wrap.strokeTopWeight = 0;
+      wrap.strokeRightWeight = 0;
+      wrap.strokeBottomWeight = 0;
     }
 
     for (let i = 0; i < LABELS.length; i++) {
-      const cell = await makeVerticalRow(spec, LABELS[i], i === ACTIVE_INDEX, variant);
-      wrap.appendChild(cell);
-      try { cell.layoutSizingHorizontal = 'FILL'; cell.layoutSizingVertical = 'HUG'; } catch (e) {}
+      const isActive = i === ACTIVE_INDEX;
+      const variantNode = findTab(tabStyle, tabSize, isActive ? 'Active' : 'Default');
+      if (!variantNode) continue;
+      const inst = variantNode.createInstance();
+      inst.name = isActive ? 'Tab Item · Active' : 'Tab Item';
+      wrap.appendChild(inst);
+      try {
+        inst.layoutSizingHorizontal = 'FILL';
+        inst.layoutSizingVertical   = 'HUG';
+      } catch (e) {}
+      await setTabLabel(inst, LABELS[i]);
     }
     return wrap;
   }
 
   // --- Build all variants ----------------------------------------------------
   const allVariants = []; const meta = [];
-  const HSIZES = ['Medium', 'Large'];
+  const HSIZES    = ['Medium', 'Large'];
   const HVARIANTS = ['Bordered', 'Borderless', 'Filled'];
   const VVARIANTS = ['Thinner', 'Thin'];
   const FW = [false, true];
@@ -9665,14 +9612,10 @@ async function buildTabs2() {
   const compSet = figma.combineAsVariants(allVariants, moleculesPage);
   compSet.name = 'Tabs'; compSet.layoutMode = 'NONE'; compSet.fills = [];
 
-  // --- Layout grid: rows = Size × FullWidth flag; cols = Orientation+Variant
-  // Top axis: 5 columns — H/Bordered, H/Borderless, H/Filled, V/Thinner, V/Thin
-  // Y axis (per Size group): two rows for FullWidth False/True (Horizontal),
-  //   single row for Vertical.
+  // --- Layout grid (cols = Orient/Variant, rows = Size × FW)
   const PAD_LEFT = 220, PAD_TOP = 200, PAD_RIGHT = 56, PAD_BOT = 56;
-  const COL_H = 560, COL_V = 200, ROW_H_HORIZ = 110, ROW_H_VERT = 280, GROUP_GAP = 32;
+  const COL_H = 600, COL_V = 240, ROW_H_HORIZ = 110, ROW_H_VERT = 320, GROUP_GAP = 32;
 
-  // Column positions
   const cols = [
     { name: 'H/Bordered',   match: { orient: 'Horizontal', variant: 'Bordered'  }, w: COL_H },
     { name: 'H/Borderless', match: { orient: 'Horizontal', variant: 'Borderless'}, w: COL_H },
@@ -9684,20 +9627,18 @@ async function buildTabs2() {
   for (const c of cols) { c.x = cx; cx += c.w; }
   const totalW = cx;
 
-  // Build rowGroups (per Size)
   const rowGroups = [];
   let cy = PAD_TOP;
   for (const sz of HSIZES) {
     const states = [
-      { name: 'Full Width = False', y: cy,                  height: ROW_H_HORIZ, fw: false, isVert: false },
-      { name: 'Full Width = True',  y: cy + ROW_H_HORIZ,    height: ROW_H_HORIZ, fw: true,  isVert: false },
-      { name: 'Vertical',           y: cy + ROW_H_HORIZ * 2, height: ROW_H_VERT, fw: false, isVert: true  },
+      { name: 'Full Width = False', y: cy,                   height: ROW_H_HORIZ, fw: false, isVert: false },
+      { name: 'Full Width = True',  y: cy + ROW_H_HORIZ,     height: ROW_H_HORIZ, fw: true,  isVert: false },
+      { name: 'Vertical',           y: cy + ROW_H_HORIZ * 2, height: ROW_H_VERT,  fw: false, isVert: true  },
     ];
     rowGroups.push({ name: `Size: ${sz}`, y: cy, states, sizeKey: sz });
     cy += ROW_H_HORIZ * 2 + ROW_H_VERT + GROUP_GAP;
   }
 
-  // Place variants
   for (let i = 0; i < allVariants.length; i++) {
     const v = allVariants[i]; const m = meta[i];
     const col = cols.find(c => c.match.orient === m.orient && c.match.variant === m.variant);
@@ -9711,7 +9652,6 @@ async function buildTabs2() {
   compSet.resize(totalW + PAD_RIGHT, cy + PAD_BOT);
   autoPositionBelow(moleculesPage, compSet, 120);
 
-  // Decoration — adapt structure to decorateComponentSet API
   const colGroups = [{ name: 'Orientation × Variant', x: PAD_LEFT, width: totalW - PAD_LEFT,
     sizes: cols.map(c => ({ name: c.name, x: c.x, width: c.w })) }];
 
@@ -9723,7 +9663,7 @@ async function buildTabs2() {
     componentName: 'Tabs', surfaceVar: required['surface/card'], borderVar: required['border/default'],
   });
 
-  figma.notify(`✅ Tabs (molecule) built: ${allVariants.length} variants.`);
+  figma.notify(`✅ Tabs (molecule) built: ${allVariants.length} variants using Tab Item instances.`);
 }
 
 

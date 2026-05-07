@@ -12796,21 +12796,22 @@ async function buildComponentTokens() {
 
 // =============================================================================
 // PAGE HEADER (Organism) — Phase 5
-// Composes: Breadcrumb (optional), Title cluster (H1/H2 + subtitle), Actions
-// cluster (SearchBar + Button instances), optional Tabs row.
-// Variants: Layout = Default | With-Tabs | With-Search-Tabs (3)
-//           Density = Default | Compact (2)
-// = 6 variants. Width fixed at 1280.
+// Web-app page header (NOT marketing). Title max 18px (Heading/H5).
+// Composes: Breadcrumb + Title cluster (H5 + body subtitle) + Actions
+// (SearchBar + Button instances) + optional Tabs row.
+// Variants: Layout = Default | With-Tabs | With-Search-Tabs (3 rows)
+//           Density = Default | Compact (2 cols)
+// = 6 variants. Width = 720 (single-page content area).
+// Wrapped via decorateComponentSet (shared template — no custom showcase).
 // =============================================================================
 async function buildPageHeader() {
   console.log('[OM DS] buildPageHeader started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
   const required = await resolveFormTokens('PageHeader');
 
-  // Load Component/PageHeader collection vars directly so each layer binds to
-  // its own dedicated token (text/title ≠ text/subtitle ≠ text/breadcrumb,
-  // even when they share a semantic source). The substitution inside
-  // resolveFormTokens is "first wins" and would otherwise collapse them.
+  // Bind layers directly to Component/PageHeader vars (resolveFormTokens
+  // substitution is "first wins" and would collapse text/title vs
+  // text/subtitle when they share a semantic source).
   const phCol = (await figma.variables.getLocalVariableCollectionsAsync())
     .find(c => c.name === 'Component/PageHeader');
   const phVars = {};
@@ -12820,19 +12821,16 @@ async function buildPageHeader() {
       if (v.variableCollectionId === phCol.id) phVars[v.name] = v;
     }
   }
-  const ph = (name) => phVars[name] || required[name === 'surface' ? 'surface/card'
-    : name === 'surface/page' ? 'surface/base'
-    : name === 'border/divider' ? 'border/default'
-    : name === 'text/title' ? 'text/primary'
-    : name === 'text/subtitle' ? 'text/secondary'
-    : name === 'text/breadcrumb' ? 'text/secondary'
-    : name === 'text/breadcrumb/current' ? 'text/primary'
-    : name === 'icon/default' ? 'icon/default'
-    : name === 'tabs/baseline' ? 'border/default'
-    : name === 'tabs/text/default' ? 'text/secondary'
-    : name === 'tabs/text/active' ? 'brand/primary'
-    : name === 'tabs/indicator' ? 'brand/primary'
-    : 'text/primary'];
+  const FALLBACK = {
+    'surface': 'surface/card', 'surface/page': 'surface/base',
+    'border/divider': 'border/default',
+    'text/title': 'text/primary', 'text/subtitle': 'text/secondary',
+    'text/breadcrumb': 'text/secondary', 'text/breadcrumb/current': 'text/primary',
+    'icon/default': 'icon/default',
+    'tabs/baseline': 'border/default', 'tabs/text/default': 'text/secondary',
+    'tabs/text/active': 'brand/primary', 'tabs/indicator': 'brand/primary',
+  };
+  const ph = (name) => phVars[name] || required[FALLBACK[name] || 'text/primary'];
 
   const organismsPage = figma.root.children.find(p => p.name.includes('Organisms')) || figma.currentPage;
   const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'));
@@ -12842,14 +12840,13 @@ async function buildPageHeader() {
   // Idempotency
   const _exist = organismsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Page Header');
   if (_exist) _exist.remove();
-  for (const n of organismsPage.children.filter(c => c.type === 'FRAME' && c.name === 'Page Header — Showcase')) n.remove();
+  for (const n of organismsPage.children.filter(c => c.type === 'FRAME' && c.name === 'Page Header')) n.remove();
 
   const styles = await figma.getLocalTextStylesAsync();
   const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
   await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
   await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
   await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
 
   // Locate dependency components
   const buttonSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Button');
@@ -12857,9 +12854,9 @@ async function buildPageHeader() {
   const searchBarSet = moleculesPage && moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && (n.name === 'Search Bar' || n.name === 'SearchBar'));
   const tabsSet = moleculesPage && moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Tabs');
 
-  function findButton(color, size, state) {
+  function findButton(color, size) {
     if (!buttonSet) return null;
-    return buttonSet.children.find(c => c.name === `Type=Default, Color=${color}, Size=${size}, State=${state}`)
+    return buttonSet.children.find(c => c.name === `Type=Default, Color=${color}, Size=${size}, State=Default`)
         || buttonSet.children.find(c => c.name === `Type=Default, Color=${color}, Size=Default, State=Default`);
   }
   function findBreadcrumb() {
@@ -12883,17 +12880,19 @@ async function buildPageHeader() {
     try { t.characters = txt; } catch (e) {}
   }
 
-  const WIDTH = 1280;
+  // Web-app realistic widths (NOT marketing-site full-bleed)
+  const WIDTH_DEFAULT = 720;
+  const WIDTH_COMPACT = 720;
 
-  // Build a single variant
   async function buildVariant(layout, density) {
     const isCompact = density === 'Compact';
     const showTabs = layout === 'With-Tabs' || layout === 'With-Search-Tabs';
     const showSearch = layout === 'With-Search-Tabs';
 
-    const pad = isCompact ? 16 : 24;
-    const titleStyle = isCompact ? 'Heading/H2' : 'Heading/H1';
-    const sectionGap = isCompact ? 12 : 16;
+    const padX = isCompact ? 16 : 20;
+    const padY = isCompact ? 12 : 16;
+    const sectionGap = isCompact ? 8 : 12;
+    const btnSize = isCompact ? 'Small' : 'Default';
 
     const comp = figma.createComponent();
     comp.name = `Layout=${layout}, Density=${density}`;
@@ -12901,8 +12900,8 @@ async function buildPageHeader() {
     comp.primaryAxisSizingMode = 'AUTO';
     comp.counterAxisSizingMode = 'FIXED';
     comp.itemSpacing = sectionGap;
-    comp.paddingLeft = comp.paddingRight = pad;
-    comp.paddingTop = comp.paddingBottom = pad;
+    comp.paddingLeft = comp.paddingRight = padX;
+    comp.paddingTop = comp.paddingBottom = padY;
     comp.fills = [paintForVar(ph('surface'))];
     comp.strokes = [paintForVar(ph('border/divider'))];
     comp.strokeWeight = 1;
@@ -12911,9 +12910,9 @@ async function buildPageHeader() {
     comp.strokeTopWeight = 0;
     comp.strokeLeftWeight = 0;
     comp.strokeRightWeight = 0;
-    comp.resize(WIDTH, 100);
+    comp.resize(isCompact ? WIDTH_COMPACT : WIDTH_DEFAULT, 100);
 
-    // Row 1: Breadcrumb
+    // Breadcrumb (always present)
     const bcVariant = findBreadcrumb();
     if (bcVariant) {
       const bc = bcVariant.createInstance();
@@ -12921,7 +12920,7 @@ async function buildPageHeader() {
       try { bc.layoutSizingHorizontal = 'HUG'; } catch (e) {}
     }
 
-    // Row 2: Title row
+    // Title row: Title cluster ↔ Actions
     const titleRow = figma.createFrame();
     titleRow.name = 'Title Row';
     titleRow.layoutMode = 'HORIZONTAL';
@@ -12929,7 +12928,7 @@ async function buildPageHeader() {
     titleRow.counterAxisSizingMode = 'AUTO';
     titleRow.primaryAxisAlignItems = 'SPACE_BETWEEN';
     titleRow.counterAxisAlignItems = 'CENTER';
-    titleRow.itemSpacing = 16;
+    titleRow.itemSpacing = 12;
     titleRow.fills = [];
     comp.appendChild(titleRow);
     try { titleRow.layoutSizingHorizontal = 'FILL'; } catch (e) {}
@@ -12940,13 +12939,14 @@ async function buildPageHeader() {
     titleCluster.layoutMode = 'VERTICAL';
     titleCluster.primaryAxisSizingMode = 'AUTO';
     titleCluster.counterAxisSizingMode = 'AUTO';
-    titleCluster.itemSpacing = 4;
+    titleCluster.itemSpacing = 2;
     titleCluster.fills = [];
     titleRow.appendChild(titleCluster);
     try { titleCluster.layoutSizingHorizontal = 'FILL'; } catch (e) {}
 
+    // Title — H5 (18px) for both densities. Web-app spec: never larger.
     const title = figma.createText();
-    const ts = styleByName[titleStyle];
+    const ts = styleByName['Heading/H5'];
     if (ts) await title.setTextStyleIdAsync(ts.id);
     title.characters = 'Customer Insights';
     title.fills = [paintForVar(ph('text/title'))];
@@ -12954,7 +12954,7 @@ async function buildPageHeader() {
 
     if (!isCompact) {
       const sub = figma.createText();
-      const ss = styleByName['Body/Default'];
+      const ss = styleByName['Body/Small'];
       if (ss) await sub.setTextStyleIdAsync(ss.id);
       sub.characters = 'Track engagement, satisfaction, and growth across all segments.';
       sub.fills = [paintForVar(ph('text/subtitle'))];
@@ -12978,23 +12978,23 @@ async function buildPageHeader() {
       if (sb) {
         const sbI = sb.createInstance();
         actions.appendChild(sbI);
-        try { sbI.resize(280, sbI.height); } catch (e) {}
+        try { sbI.resize(220, sbI.height); } catch (e) {}
       }
     }
-    const secondaryBtn = findButton('Secondary', 'Default', 'Default');
+    const secondaryBtn = findButton('Secondary', btnSize);
     if (secondaryBtn) {
       const inst = secondaryBtn.createInstance();
       actions.appendChild(inst);
       await setButtonText(inst, 'Export');
     }
-    const primaryBtn = findButton('Primary', 'Default', 'Default');
+    const primaryBtn = findButton('Primary', btnSize);
     if (primaryBtn) {
       const inst = primaryBtn.createInstance();
       actions.appendChild(inst);
       await setButtonText(inst, 'New report');
     }
 
-    // Row 3: Tabs (optional)
+    // Optional Tabs row
     if (showTabs) {
       const tv = findTabs();
       if (tv) {
@@ -13007,70 +13007,100 @@ async function buildPageHeader() {
     return comp;
   }
 
+  // ---- Build matrix: 3 layouts (rows) × 2 densities (cols) -----------------
   const LAYOUTS = ['Default', 'With-Tabs', 'With-Search-Tabs'];
   const DENSITIES = ['Default', 'Compact'];
+
   const variants = [];
+  const grid = {}; // grid[layout][density] = comp
   for (const layout of LAYOUTS) {
+    grid[layout] = {};
     for (const density of DENSITIES) {
       const v = await buildVariant(layout, density);
       variants.push(v);
+      grid[layout][density] = v;
     }
   }
 
+  // ---- Combine into ComponentSet, then position cells in a grid -----------
   const compSet = figma.combineAsVariants(variants, organismsPage);
   compSet.name = 'Page Header';
-  compSet.layoutMode = 'VERTICAL';
-  compSet.itemSpacing = 24;
-  compSet.paddingLeft = compSet.paddingRight = 32;
-  compSet.paddingTop = compSet.paddingBottom = 32;
-  compSet.primaryAxisSizingMode = 'AUTO';
-  compSet.counterAxisSizingMode = 'AUTO';
+  compSet.layoutMode = 'NONE';
   compSet.fills = [paintForVar(ph('surface/page'))];
   compSet.strokes = [paintForVar(ph('border/divider'))];
   compSet.strokeWeight = 1;
   compSet.cornerRadius = 16;
 
-  // Showcase
-  const showcase = figma.createFrame();
-  showcase.name = 'Page Header — Showcase';
-  showcase.layoutMode = 'VERTICAL';
-  showcase.itemSpacing = 32;
-  showcase.paddingLeft = showcase.paddingRight = 48;
-  showcase.paddingTop = showcase.paddingBottom = 48;
-  showcase.primaryAxisSizingMode = 'AUTO';
-  showcase.counterAxisSizingMode = 'AUTO';
-  showcase.fills = [paintForVar(ph('surface/page'))];
-  organismsPage.appendChild(showcase);
-  showcase.x = compSet.x + compSet.width + 100;
-  showcase.y = compSet.y;
+  const PAD_TOP = 100;
+  const PAD_LEFT = 200;
+  const PAD_RIGHT = 40;
+  const PAD_BOT = 40;
+  const COL_GAP = 48;
+  const ROW_GAP = 64;
 
-  const heading = figma.createText();
-  const hs = styleByName['Heading/H1'];
-  if (hs) await heading.setTextStyleIdAsync(hs.id);
-  heading.characters = 'Page Header';
-  heading.fills = [paintForVar(ph('text/title'))];
-  showcase.appendChild(heading);
-
-  const sub = figma.createText();
-  const ss = styleByName['Body/Default'];
-  if (ss) await sub.setTextStyleIdAsync(ss.id);
-  sub.characters = 'Top-of-page region: Breadcrumb + Title + Actions, with optional Search and Tabs.';
-  sub.fills = [paintForVar(ph('text/subtitle'))];
-  showcase.appendChild(sub);
-
-  for (const v of variants) {
-    const label = figma.createText();
-    const ls = styleByName['Heading/H4'];
-    if (ls) await label.setTextStyleIdAsync(ls.id);
-    label.characters = v.name;
-    label.fills = [paintForVar(ph('text/subtitle'))];
-    showcase.appendChild(label);
-    const inst = v.createInstance();
-    showcase.appendChild(inst);
+  // Measure column widths (max width per density across rows)
+  const colW = {};
+  for (const d of DENSITIES) {
+    let maxW = 0;
+    for (const l of LAYOUTS) {
+      const v = grid[l][d];
+      if (v.width > maxW) maxW = v.width;
+    }
+    colW[d] = maxW;
+  }
+  const colX = {};
+  let cx = PAD_LEFT;
+  for (const d of DENSITIES) {
+    colX[d] = cx;
+    cx += colW[d] + COL_GAP;
+  }
+  // Row heights
+  const rowH = {};
+  for (const l of LAYOUTS) {
+    let maxH = 0;
+    for (const d of DENSITIES) {
+      const v = grid[l][d];
+      if (v.height > maxH) maxH = v.height;
+    }
+    rowH[l] = maxH;
+  }
+  const rowY = {};
+  let cy = PAD_TOP;
+  for (const l of LAYOUTS) {
+    rowY[l] = cy;
+    cy += rowH[l] + ROW_GAP;
   }
 
+  for (const l of LAYOUTS) {
+    for (const d of DENSITIES) {
+      const v = grid[l][d];
+      v.x = colX[d];
+      v.y = rowY[l];
+    }
+  }
+  compSet.resize(cx - COL_GAP + PAD_RIGHT, cy - ROW_GAP + PAD_BOT);
+  autoPositionBelow(organismsPage, compSet, 120);
+
+  // ---- Decorate using shared template -------------------------------------
+  const colGroups = [{
+    name: 'Density', x: PAD_LEFT, width: cx - COL_GAP - PAD_LEFT,
+    sizes: DENSITIES.map(d => ({ name: d, x: colX[d], width: colW[d] })),
+  }];
+  const rowGroups = LAYOUTS.map(l => ({
+    name: l, y: rowY[l],
+    states: [{ name: '', y: rowY[l], height: rowH[l] }],
+  }));
+  await decorateComponentSet({
+    page: organismsPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Page Header',
+    surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
   console.log(`[OM DS] Page Header variants built: ${variants.length}`);
-  figma.notify(`✅ Page Header: ${variants.length} variants built.`);
+  figma.notify(`✅ Page Header: ${variants.length} variants (Layout × Density).`);
 }
 
 // =============================================================================

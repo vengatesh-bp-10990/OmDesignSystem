@@ -5492,7 +5492,7 @@ async function buildLabel() {
     const labelText = figma.createText();
     if (lblStyle) await labelText.setTextStyleIdAsync(lblStyle.id);
     labelText.characters = 'Label';
-    labelText.fills = [paintForVar(state === 'Disabled' ? required['state/disabled-text'] : required['text/primary'])];
+    labelText.fills = [paintForVar(state === 'Disabled' ? required['state/disabled-text'] : required['text/secondary'])];
     comp.appendChild(labelText);
 
     const optText = figma.createText();
@@ -6777,7 +6777,7 @@ async function buildDropdown() {
     if (chevronIc) {
       const ic = chevronIc.createInstance();
       ic.resize(spec.icon, spec.icon);
-      bindIconColorForm(ic, state === 'Disabled' ? required['state/disabled-text'] : required['icon/default']);
+      bindIconColorForm(ic, state === 'Disabled' ? required['state/disabled-text'] : required['text/primary']);
       field.appendChild(ic);
       try { ic.layoutSizingHorizontal = 'FIXED'; ic.layoutSizingVertical = 'FIXED'; } catch (e) {}
     }

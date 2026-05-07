@@ -12804,6 +12804,42 @@ const COMPONENT_TOKEN_SPECS = {
     'footer/text':          'text/secondary',
     'selection/checkbox':   'brand/primary',
   },
+  'TableCell': {
+    'text/primary':     'text/primary',
+    'text/secondary':   'text/secondary',
+    'text/muted':       'text/tertiary',
+    'text/disabled':    'state/disabled-text',
+    'text/link':        'brand/primary',
+    'text/link/hover':  'brand/primary-hover',
+    'icon/default':     'icon/default',
+    'icon/subtle':      'icon/subtle',
+    'mono/text':        'text/primary',
+    'mono/bg':           'state/disabled-bg',
+  },
+  'TableHeaderCell': {
+    'bg/default':     'surface/base',
+    'bg/hover':       'state/disabled-bg',
+    'text/default':   'text/secondary',
+    'text/active':    'text/primary',
+    'icon/sort':      'icon/subtle',
+    'icon/sort/active': 'brand/primary',
+    'border/bottom':  'border/default',
+    'border/right':   'border/default',
+  },
+  'TableRow': {
+    'bg/default':       'surface/card',
+    'bg/hover':         'state/disabled-bg',
+    'bg/selected':      'brand/primary-subtle',
+    'bg/disabled':      'state/disabled-bg',
+    'bg/pressed':       'border/default',
+    'bg/focused':       'brand/primary-subtle',
+    'bg/error':         'status/danger-subtle',
+    'bg/warning':       'status/warning-subtle',
+    'bg/zebra':         'surface/base',
+    'border/divider':   'border/default',
+    'focus/ring':       'brand/primary',
+    'text/disabled':    'state/disabled-text',
+  },
 };
 
 async function buildComponentTokens() {
@@ -13833,6 +13869,538 @@ async function buildFormLayout() {
 }
 
 // =============================================================================
+// TABLE CELL ATOMS (Phase 5 — modular table)
+// Builds 13 separate Table Cell components on the Atoms page, one per content
+// type. Each has Density variants (Compact/Default/Comfortable). Cells have
+// transparent background — Row owns bg state. Cells share Component/TableCell
+// color tokens.
+//
+// Types: Text, User (avatar+text), Badge, Actions, Checkbox, Number, Date,
+// Link, Progress, Toggle, Timezone, Description, Logs.
+// =============================================================================
+const TABLE_CELL_DENSITY = {
+  Compact:     { padY: 6,  text: 'Body/Small',   sub: 'Body/Small', icon: 12, avatar: 'XS',     gap: 6 },
+  Default:     { padY: 12, text: 'Body/Default', sub: 'Body/Small', icon: 14, avatar: 'Small',  gap: 8 },
+  Comfortable: { padY: 16, text: 'Body/Default', sub: 'Body/Small', icon: 16, avatar: 'Medium', gap: 10 },
+};
+const TABLE_CELL_DENSITIES = ['Compact', 'Default', 'Comfortable'];
+const TABLE_CELL_PAD_X = 16;
+const TABLE_CELL_DEFAULT_W = 200;
+
+async function buildTableCells() {
+  console.log('[OM DS] buildTableCells started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens('TableCell');
+
+  const tcCol = (await figma.variables.getLocalVariableCollectionsAsync())
+    .find(c => c.name === 'Component/TableCell');
+  const tcVars = {};
+  if (tcCol) {
+    const all = await figma.variables.getLocalVariablesAsync('COLOR');
+    for (const v of all) if (v.variableCollectionId === tcCol.id) tcVars[v.name] = v;
+  }
+  const FALLBACK = {
+    'text/primary':'text/primary','text/secondary':'text/secondary','text/muted':'text/tertiary',
+    'text/disabled':'state/disabled-text','text/link':'brand/primary','text/link/hover':'brand/primary-hover',
+    'icon/default':'icon/default','icon/subtle':'icon/subtle',
+    'mono/text':'text/primary','mono/bg':'state/disabled-bg',
+  };
+  const tk = (n) => tcVars[n] || required[FALLBACK[n] || 'text/primary'];
+
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || figma.currentPage;
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'));
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  await figma.setCurrentPageAsync(atomsPage);
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+  // For Logs (mono); fallback to Inter if Roboto Mono missing.
+  let monoFont = { family: 'Inter', style: 'Regular' };
+  try { await figma.loadFontAsync({ family: 'Roboto Mono', style: 'Regular' }); monoFont = { family: 'Roboto Mono', style: 'Regular' }; } catch (e) {}
+
+  // Atom dependencies (best-effort)
+  const avatarSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Avatar');
+  const badgeSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Badge');
+  const checkboxSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Checkbox');
+  const toggleSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Toggle');
+  const iconBtnSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'IconButton');
+  const progressSet = moleculesPage && moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Progress');
+
+  function findVariant(set, regexes) {
+    if (!set) return null;
+    return set.children.find(c => regexes.every(r => r.test(c.name))) || set.children[0];
+  }
+  async function makeText(txt, styleName, colorVar, opts) {
+    const t = figma.createText();
+    const s = styleByName[styleName];
+    if (s) await t.setTextStyleIdAsync(s.id);
+    t.characters = txt;
+    if (colorVar) t.fills = [paintForVar(colorVar)];
+    if (opts && opts.align) t.textAlignHorizontal = opts.align;
+    return t;
+  }
+
+  // ---- Cell base frame factory --------------------------------------------
+  function makeCellBase(name, density, align) {
+    const d = TABLE_CELL_DENSITY[density];
+    const c = figma.createComponent();
+    c.name = name;
+    c.layoutMode = 'HORIZONTAL';
+    c.itemSpacing = d.gap;
+    c.paddingLeft = c.paddingRight = TABLE_CELL_PAD_X;
+    c.paddingTop = c.paddingBottom = d.padY;
+    c.counterAxisAlignItems = 'CENTER';
+    c.primaryAxisAlignItems = align === 'Right' ? 'MAX' : align === 'Center' ? 'CENTER' : 'MIN';
+    c.fills = []; // Transparent — Row owns bg
+    c.resize(TABLE_CELL_DEFAULT_W, 1);
+    c.counterAxisSizingMode = 'FIXED';
+    c.primaryAxisSizingMode = 'AUTO';
+    return c;
+  }
+
+  // ---- Cell content builders (one per type) -------------------------------
+  const TYPES = [];
+
+  TYPES.push({
+    name: 'Text', aligns: ['Left'],
+    async build(cell, density) {
+      const d = TABLE_CELL_DENSITY[density];
+      const t = await makeText('Aarav Mehta', d.text, tk('text/primary'));
+      cell.appendChild(t);
+    },
+  });
+
+  TYPES.push({
+    name: 'User', aligns: ['Left'],
+    async build(cell, density) {
+      const d = TABLE_CELL_DENSITY[density];
+      const av = avatarSet && (avatarSet.children.find(c => new RegExp(`Size=${d.avatar}`).test(c.name)) || avatarSet.children[0]);
+      if (av) cell.appendChild(av.createInstance());
+      const wrap = figma.createFrame();
+      wrap.layoutMode = 'VERTICAL';
+      wrap.itemSpacing = 0;
+      wrap.fills = [];
+      cell.appendChild(wrap);
+      try { wrap.layoutSizingHorizontal = 'HUG'; wrap.layoutSizingVertical = 'HUG'; } catch (e) {}
+      wrap.appendChild(await makeText('Aarav Mehta', d.text, tk('text/primary')));
+      if (density !== 'Compact') wrap.appendChild(await makeText('aarav@om.dev', d.sub, tk('text/secondary')));
+    },
+  });
+
+  TYPES.push({
+    name: 'Badge', aligns: ['Left'],
+    async build(cell, density) {
+      if (badgeSet) {
+        const v = badgeSet.children.find(c => /Color=Success/.test(c.name)) || badgeSet.children[0];
+        const inst = v.createInstance();
+        cell.appendChild(inst);
+        const t = inst.findOne(n => n.type === 'TEXT');
+        if (t) { try { await figma.loadFontAsync(t.fontName); t.characters = 'Active'; } catch (e) {} }
+      } else {
+        cell.appendChild(await makeText('Active', TABLE_CELL_DENSITY[density].text, tk('text/primary')));
+      }
+    },
+  });
+
+  TYPES.push({
+    name: 'Actions', aligns: ['Right'],
+    async build(cell, density) {
+      const d = TABLE_CELL_DENSITY[density];
+      const size = density === 'Compact' ? 'Small' : 'Default';
+      const v = findVariant(iconBtnSet, [/Variant=Ghost/, new RegExp(`Size=${size}`), /State=Default/]);
+      if (v) cell.appendChild(v.createInstance());
+    },
+  });
+
+  TYPES.push({
+    name: 'Checkbox', aligns: ['Center'],
+    async build(cell, density) {
+      const v = findVariant(checkboxSet, [/Checked=Unchecked/, /State=Default/, /Size=Small/]);
+      if (v) cell.appendChild(v.createInstance());
+    },
+  });
+
+  TYPES.push({
+    name: 'Number', aligns: ['Right'],
+    async build(cell, density) {
+      const d = TABLE_CELL_DENSITY[density];
+      const t = await makeText('$12,480.00', d.text, tk('text/primary'), { align: 'RIGHT' });
+      cell.appendChild(t);
+    },
+  });
+
+  TYPES.push({
+    name: 'Date', aligns: ['Left'],
+    async build(cell, density) {
+      const d = TABLE_CELL_DENSITY[density];
+      cell.appendChild(await makeText('May 7, 2026', d.text, tk('text/primary')));
+    },
+  });
+
+  TYPES.push({
+    name: 'Link', aligns: ['Left'],
+    async build(cell, density) {
+      const d = TABLE_CELL_DENSITY[density];
+      const t = await makeText('View report', d.text, tk('text/link'));
+      try { t.textDecoration = 'UNDERLINE'; } catch (e) {}
+      cell.appendChild(t);
+    },
+  });
+
+  TYPES.push({
+    name: 'Progress', aligns: ['Left'],
+    async build(cell, density) {
+      const d = TABLE_CELL_DENSITY[density];
+      if (progressSet) {
+        const v = progressSet.children.find(c => /Type=Bar/.test(c.name)) || progressSet.children[0];
+        const inst = v.createInstance();
+        cell.appendChild(inst);
+        try { inst.resize(120, inst.height); } catch (e) {}
+      } else {
+        // Fallback bar
+        const track = figma.createRectangle();
+        track.resize(120, 6);
+        track.cornerRadius = 3;
+        track.fills = [paintForVar(tk('mono/bg'))];
+        cell.appendChild(track);
+      }
+      cell.appendChild(await makeText('64%', d.sub, tk('text/secondary')));
+    },
+  });
+
+  TYPES.push({
+    name: 'Toggle', aligns: ['Center'],
+    async build(cell, density) {
+      const v = findVariant(toggleSet, [/State=Default/, /On=Off/, /Size=Small/]);
+      if (v) cell.appendChild(v.createInstance());
+    },
+  });
+
+  TYPES.push({
+    name: 'Timezone', aligns: ['Left'],
+    async build(cell, density) {
+      const d = TABLE_CELL_DENSITY[density];
+      const wrap = figma.createFrame();
+      wrap.layoutMode = 'VERTICAL';
+      wrap.itemSpacing = 0;
+      wrap.fills = [];
+      cell.appendChild(wrap);
+      wrap.appendChild(await makeText('America/New_York', d.text, tk('text/primary')));
+      if (density !== 'Compact') wrap.appendChild(await makeText('GMT−05:00 · 09:42 AM', d.sub, tk('text/secondary')));
+    },
+  });
+
+  TYPES.push({
+    name: 'Description', aligns: ['Left'],
+    async build(cell, density) {
+      const d = TABLE_CELL_DENSITY[density];
+      const t = await makeText(
+        'Tracks the customer onboarding flow from sign-up to first successful action — used for retention dashboards.',
+        d.text, tk('text/secondary')
+      );
+      // Truncate to 2 lines visually (Figma supports textTruncation when textAutoResize allows)
+      try { t.textAutoResize = 'HEIGHT'; } catch (e) {}
+      try { t.maxLines = 2; t.textTruncation = 'ENDING'; } catch (e) {}
+      try { t.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+      cell.appendChild(t);
+    },
+  });
+
+  TYPES.push({
+    name: 'Logs', aligns: ['Left'],
+    async build(cell, density) {
+      const d = TABLE_CELL_DENSITY[density];
+      const wrap = figma.createFrame();
+      wrap.layoutMode = 'VERTICAL';
+      wrap.itemSpacing = 2;
+      wrap.fills = [];
+      cell.appendChild(wrap);
+      try { wrap.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+      const log = figma.createText();
+      log.fontName = monoFont;
+      log.characters = '[INFO] api/v1/users · 200 · 84ms';
+      log.fontSize = density === 'Compact' ? 11 : 12;
+      log.fills = [paintForVar(tk('mono/text'))];
+      wrap.appendChild(log);
+      const more = await makeText('View more', d.sub, tk('text/link'));
+      try { more.textDecoration = 'UNDERLINE'; } catch (e) {}
+      wrap.appendChild(more);
+    },
+  });
+
+  // ---- Build all cell types ----------------------------------------------
+  const built = [];
+  for (const T of TYPES) {
+    const setName = `Table Cell - ${T.name}`;
+    // Idempotent
+    const _ex = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === setName);
+    if (_ex) _ex.remove();
+    for (const n of atomsPage.children.filter(c => c.type === 'FRAME' && c.name === setName)) n.remove();
+
+    const variants = [];
+    for (const density of TABLE_CELL_DENSITIES) {
+      for (const align of T.aligns) {
+        const cell = makeCellBase(`Density=${density}, Align=${align}`, density, align);
+        await T.build(cell, density, align);
+        variants.push(cell);
+      }
+    }
+    if (variants.length === 0) continue;
+    if (variants.length === 1) {
+      // Single variant — wrap as standalone component, no combine
+      atomsPage.appendChild(variants[0]);
+      variants[0].name = setName;
+      built.push(variants[0]);
+    } else {
+      const set = figma.combineAsVariants(variants, atomsPage);
+      set.name = setName;
+      set.layoutMode = 'VERTICAL';
+      set.itemSpacing = 24;
+      set.paddingLeft = set.paddingRight = 32;
+      set.paddingTop = set.paddingBottom = 32;
+      set.cornerRadius = 12;
+      set.strokes = [paintForVar(required['border/default'])];
+      set.strokeWeight = 1;
+      built.push(set);
+    }
+  }
+
+  // Lay out side-by-side on Atoms page
+  let lastX = 0, lastY = 0;
+  const tableCellAnchor = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Table Cell - Text');
+  if (tableCellAnchor) {
+    const startX = tableCellAnchor.x;
+    let cx = startX;
+    let cy = tableCellAnchor.y;
+    let rowH = 0;
+    let col = 0;
+    for (const node of built) {
+      node.x = cx;
+      node.y = cy;
+      cx += node.width + 48;
+      if (node.height > rowH) rowH = node.height;
+      col++;
+      if (col % 4 === 0) { cx = startX; cy += rowH + 48; rowH = 0; }
+    }
+  }
+
+  console.log(`[OM DS] Table Cells built: ${built.length} components (${TYPES.length} types × ${TABLE_CELL_DENSITIES.length} densities)`);
+  figma.notify(`✅ Table Cells: ${built.length} components built (13 types × 3 densities).`);
+}
+
+// =============================================================================
+// TABLE HEADER CELL (Phase 5)
+// Variants: Sortable (None / Asc / Desc) × Align (Left / Right / Center) ×
+//           State (Default / Hover) = 18 variants. Density baked in via density
+//           controlled at the table level (we use Default density for the
+//           component; row sets cell padding so all densities render consistently).
+// =============================================================================
+async function buildTableHeaderCell() {
+  console.log('[OM DS] buildTableHeaderCell started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens('TableHeaderCell');
+
+  const thCol = (await figma.variables.getLocalVariableCollectionsAsync())
+    .find(c => c.name === 'Component/TableHeaderCell');
+  const thVars = {};
+  if (thCol) {
+    const all = await figma.variables.getLocalVariablesAsync('COLOR');
+    for (const v of all) if (v.variableCollectionId === thCol.id) thVars[v.name] = v;
+  }
+  const FALLBACK = {
+    'bg/default':'surface/base','bg/hover':'state/disabled-bg',
+    'text/default':'text/secondary','text/active':'text/primary',
+    'icon/sort':'icon/subtle','icon/sort/active':'brand/primary',
+    'border/bottom':'border/default','border/right':'border/default',
+  };
+  const tk = (n) => thVars[n] || required[FALLBACK[n] || 'text/secondary'];
+
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || figma.currentPage;
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  await figma.setCurrentPageAsync(atomsPage);
+
+  const _ex = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Table Header Cell');
+  if (_ex) _ex.remove();
+  for (const n of atomsPage.children.filter(c => c.type === 'FRAME' && c.name === 'Table Header Cell')) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+
+  const sortAsc = iconsPage && await findOrCreateIconComponent('chevron-up', iconsPage, required['icon/subtle']);
+  const sortDesc = iconsPage && await findOrCreateIconComponent('chevron-down', iconsPage, required['icon/subtle']);
+  const sortNone = iconsPage && (await findOrCreateIconComponent('chevrons-up-down', iconsPage, required['icon/subtle']) || sortAsc);
+
+  function bindIconColor(node, colorVar) {
+    if ('fills' in node && Array.isArray(node.fills) && node.fills.length) {
+      node.fills = node.fills.map(p => p.type === 'SOLID' && p.visible !== false
+        ? figma.variables.setBoundVariableForPaint(p, 'color', colorVar) : p);
+    }
+    if ('children' in node) for (const c of node.children) bindIconColor(c, colorVar);
+  }
+
+  const ALIGNS = ['Left', 'Right', 'Center'];
+  const SORTS = ['None', 'Asc', 'Desc'];
+  const STATES = ['Default', 'Hover'];
+
+  const variants = [];
+  for (const sort of SORTS) {
+    for (const align of ALIGNS) {
+      for (const state of STATES) {
+        const c = figma.createComponent();
+        c.name = `Sort=${sort}, Align=${align}, State=${state}`;
+        c.layoutMode = 'HORIZONTAL';
+        c.itemSpacing = 6;
+        c.paddingLeft = c.paddingRight = TABLE_CELL_PAD_X;
+        c.paddingTop = c.paddingBottom = 10;
+        c.counterAxisAlignItems = 'CENTER';
+        c.primaryAxisAlignItems = align === 'Right' ? 'MAX' : align === 'Center' ? 'CENTER' : 'MIN';
+        c.fills = [paintForVar(tk(state === 'Hover' ? 'bg/hover' : 'bg/default'))];
+        c.strokes = [paintForVar(tk('border/bottom'))];
+        c.strokeWeight = 1;
+        c.strokeAlign = 'INSIDE';
+        c.strokeBottomWeight = 1;
+        c.strokeTopWeight = c.strokeLeftWeight = c.strokeRightWeight = 0;
+        c.resize(TABLE_CELL_DEFAULT_W, 1);
+        c.counterAxisSizingMode = 'FIXED';
+        c.primaryAxisSizingMode = 'AUTO';
+
+        const isActive = sort !== 'None';
+        const labelColor = tk(isActive ? 'text/active' : 'text/default');
+        const t = figma.createText();
+        const s = styleByName['Label/Default'];
+        if (s) await t.setTextStyleIdAsync(s.id);
+        t.characters = 'Column';
+        t.fills = [paintForVar(labelColor)];
+        c.appendChild(t);
+
+        const sortIcon = sort === 'Asc' ? sortAsc : sort === 'Desc' ? sortDesc : sortNone;
+        if (sortIcon) {
+          const ic = sortIcon.createInstance();
+          try { ic.resize(14, 14); } catch (e) {}
+          bindIconColor(ic, tk(isActive ? 'icon/sort/active' : 'icon/sort'));
+          c.appendChild(ic);
+        }
+        variants.push(c);
+      }
+    }
+  }
+
+  const compSet = figma.combineAsVariants(variants, atomsPage);
+  compSet.name = 'Table Header Cell';
+  compSet.layoutMode = 'VERTICAL';
+  compSet.itemSpacing = 16;
+  compSet.paddingLeft = compSet.paddingRight = 32;
+  compSet.paddingTop = compSet.paddingBottom = 32;
+  compSet.cornerRadius = 12;
+  compSet.strokes = [paintForVar(required['border/default'])];
+  compSet.strokeWeight = 1;
+  autoPositionBelow(atomsPage, compSet, 120);
+
+  console.log(`[OM DS] Table Header Cell variants: ${variants.length}`);
+  figma.notify(`✅ Table Header Cell: ${variants.length} variants.`);
+}
+
+// =============================================================================
+// TABLE ROW (molecule-organism — Phase 5)
+// State variants only. Cells are slotted as instances by the table builder
+// (or by the user when customizing in Figma). Width FILL so user can resize.
+// States: Default / Hover / Selected / Disabled / Pressed / Focused / Error / Warning
+// = 8 variants. Width default 720 (responsive).
+// =============================================================================
+async function buildTableRow() {
+  console.log('[OM DS] buildTableRow started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens('TableRow');
+
+  const trCol = (await figma.variables.getLocalVariableCollectionsAsync())
+    .find(c => c.name === 'Component/TableRow');
+  const trVars = {};
+  if (trCol) {
+    const all = await figma.variables.getLocalVariablesAsync('COLOR');
+    for (const v of all) if (v.variableCollectionId === trCol.id) trVars[v.name] = v;
+  }
+  const FALLBACK = {
+    'bg/default':'surface/card','bg/hover':'state/disabled-bg','bg/selected':'brand/primary-subtle',
+    'bg/disabled':'state/disabled-bg','bg/pressed':'border/default','bg/focused':'brand/primary-subtle',
+    'bg/error':'status/danger-subtle','bg/warning':'status/warning-subtle','bg/zebra':'surface/base',
+    'border/divider':'border/default','focus/ring':'brand/primary','text/disabled':'state/disabled-text',
+  };
+  const tk = (n) => trVars[n] || required[FALLBACK[n] || 'text/primary'];
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules')) || figma.currentPage;
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms'));
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _ex = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Table Row');
+  if (_ex) _ex.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Table Row')) n.remove();
+
+  // Sample cell to slot in (Text cell, Default density). User can swap.
+  const textCellSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Table Cell - Text');
+  const textCellDef = textCellSet && (textCellSet.children.find(c => /Density=Default/.test(c.name)) || textCellSet.children[0]);
+
+  const STATES = ['Default', 'Hover', 'Selected', 'Disabled', 'Pressed', 'Focused', 'Error', 'Warning'];
+  const ROW_W = 720;
+
+  const variants = [];
+  for (const state of STATES) {
+    const r = figma.createComponent();
+    r.name = `State=${state}`;
+    r.layoutMode = 'HORIZONTAL';
+    r.itemSpacing = 0;
+    r.paddingLeft = r.paddingRight = 0;
+    r.counterAxisAlignItems = 'CENTER';
+    r.primaryAxisAlignItems = 'MIN';
+    const bgKey = `bg/${state.toLowerCase()}`;
+    r.fills = [paintForVar(tk(bgKey))];
+    r.strokes = [paintForVar(tk('border/divider'))];
+    r.strokeWeight = 1;
+    r.strokeAlign = 'INSIDE';
+    r.strokeBottomWeight = 1;
+    r.strokeTopWeight = r.strokeLeftWeight = r.strokeRightWeight = 0;
+    if (state === 'Focused') {
+      // Inset focus ring via second stroke isn't supported; use top+bottom thicker stroke pattern
+      r.strokes = [paintForVar(tk('focus/ring'))];
+      r.strokeBottomWeight = 2;
+      r.strokeTopWeight = 2;
+    }
+    r.resize(ROW_W, 1);
+    r.counterAxisSizingMode = 'FIXED';
+    r.primaryAxisSizingMode = 'AUTO';
+
+    // Slot 3 sample cells so the row has visible structure
+    if (textCellDef) {
+      for (let i = 0; i < 3; i++) {
+        const inst = textCellDef.createInstance();
+        r.appendChild(inst);
+        try { inst.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+      }
+    }
+    variants.push(r);
+  }
+
+  const compSet = figma.combineAsVariants(variants, moleculesPage);
+  compSet.name = 'Table Row';
+  compSet.layoutMode = 'VERTICAL';
+  compSet.itemSpacing = 16;
+  compSet.paddingLeft = compSet.paddingRight = 32;
+  compSet.paddingTop = compSet.paddingBottom = 32;
+  compSet.cornerRadius = 12;
+  compSet.strokes = [paintForVar(required['border/default'])];
+  compSet.strokeWeight = 1;
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  console.log(`[OM DS] Table Row variants: ${variants.length}`);
+  figma.notify(`✅ Table Row: ${variants.length} state variants.`);
+}
+
+// =============================================================================
 // DATA TABLE (Organism) — Phase 5
 // Web-app data table with toolbar, sortable header, body rows, footer.
 // Composes: Checkbox (selection), IconButton (sort/menu), Button (toolbar),
@@ -14380,6 +14948,9 @@ async function buildAllWired() {
     { name: 'PageHeader',      fn: typeof buildPageHeader      === 'function' ? buildPageHeader      : null },
     { name: 'TopNavBar',       fn: typeof buildTopNavBar       === 'function' ? buildTopNavBar       : null },
     { name: 'FormLayout',      fn: typeof buildFormLayout      === 'function' ? buildFormLayout      : null },
+    { name: 'TableCells',      fn: typeof buildTableCells      === 'function' ? buildTableCells      : null },
+    { name: 'TableHeaderCell', fn: typeof buildTableHeaderCell === 'function' ? buildTableHeaderCell : null },
+    { name: 'TableRow',        fn: typeof buildTableRow        === 'function' ? buildTableRow        : null },
     { name: 'DataTable',       fn: typeof buildDataTable       === 'function' ? buildDataTable       : null },
   ];
 
@@ -14498,6 +15069,12 @@ async function buildAllWired() {
       await buildTopNavBar();
     } else if (figma.command === 'buildFormLayout') {
       await buildFormLayout();
+    } else if (figma.command === 'buildTableCells') {
+      await buildTableCells();
+    } else if (figma.command === 'buildTableHeaderCell') {
+      await buildTableHeaderCell();
+    } else if (figma.command === 'buildTableRow') {
+      await buildTableRow();
     } else if (figma.command === 'buildDataTable') {
       await buildDataTable();
     } else if (figma.command === 'cleanupFallbackIcons') {

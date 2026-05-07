@@ -9963,6 +9963,191 @@ async function buildCalendar() {
 
 
 // =============================================================================
+// DATE PICKER (molecule) — TextField trigger + popover Calendar
+//   Size:  Small | Medium | Default
+//   State: Default | Open | Disabled
+//   Has Value: false (placeholder) | true ("May 7, 2026")
+// Composes a TextField instance (from Atoms) and, when State=Open, a Calendar
+// instance below it. NEVER re-implements the field or the calendar.
+// =============================================================================
+async function buildDatePicker() {
+  console.log('[OM DS] buildDatePicker started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules')) || figma.currentPage;
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || moleculesPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  // Idempotent cleanup
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Date Picker');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Date Picker')) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Size=(Small|Medium|Default), State=(Default|Open|Disabled), Has Value=(true|false)$/.test(c.name))) n.remove();
+
+  // Required atom dependencies
+  const tfSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'TextField');
+  if (!tfSet) {
+    figma.notify('⚠️ TextField not found. Run "Build TextField" first.');
+    return;
+  }
+  const calSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Calendar');
+  if (!calSet) {
+    figma.notify('⚠️ Calendar not found. Run "Build Calendar (Atom)" first.');
+    return;
+  }
+
+  function findTfVariant(size, fieldState, content) {
+    // TextField variant naming: Size=X, State=Y, Status=None, Content=Z
+    return tfSet.children.find(c => c.name === `Size=${size}, State=${fieldState}, Status=None, Content=${content}`)
+        || tfSet.children.find(c => c.name === `Size=${size}, State=Default, Status=None, Content=${content}`);
+  }
+  function findCalVariant(mode) {
+    return calSet.children.find(c => c.name === `Mode=${mode}`) || calSet.defaultVariant || calSet.children[0];
+  }
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const calendarIc = await findIconComp(iconsPage, ['calendar', 'calendar-days', 'event']);
+
+  async function setFieldText(inst, value, hasValue) {
+    // Find the input text node inside the TextField instance and set placeholder/value
+    const t = inst.findOne(n => n.type === 'TEXT' && (n.name === 'Input' || n.name === 'Value' || n.name === 'Placeholder'));
+    if (!t) return;
+    try { await figma.loadFontAsync(t.fontName); } catch (e) {}
+    try { t.characters = value; } catch (e) {}
+  }
+
+  async function setLabelText(inst, value) {
+    // The TextField composes a Label component. Find the topmost text inside the
+    // Label sub-instance.
+    const labelInst = inst.findOne(n => n.type === 'INSTANCE' && /Label/i.test(n.name));
+    const target = labelInst || inst;
+    const t = target.findOne(n => n.type === 'TEXT' && /label/i.test(n.name));
+    if (!t) return;
+    try { await figma.loadFontAsync(t.fontName); } catch (e) {}
+    try { t.characters = value; } catch (e) {}
+  }
+
+  async function bindSuffixIcon(tfInst) {
+    // The TextField has a "Has Suffix Icon" boolean. Toggle it via the instance's
+    // component property and then swap the icon glyph if possible.
+    try {
+      const props = tfInst.componentProperties;
+      const suffixKey = Object.keys(props || {}).find(k => /Has Suffix Icon/i.test(k));
+      if (suffixKey) tfInst.setProperties({ [suffixKey]: true });
+    } catch (e) {}
+    // Swap the visible suffix icon to a calendar glyph (best-effort).
+    if (!calendarIc) return;
+    try {
+      const suffixHolder = tfInst.findOne(n => n.type === 'INSTANCE' && /suffix/i.test(n.name));
+      if (suffixHolder) suffixHolder.swapComponent(calendarIc);
+    } catch (e) {}
+  }
+
+  async function makeVariant(size, state, hasValue) {
+    const wrap = figma.createComponent();
+    wrap.name = `Size=${size}, State=${state}, Has Value=${hasValue}`;
+    wrap.layoutMode = 'VERTICAL';
+    wrap.primaryAxisSizingMode = 'AUTO';
+    wrap.counterAxisSizingMode = 'AUTO';
+    wrap.itemSpacing = 8;
+    wrap.fills = [];
+
+    const fieldState = state === 'Open' ? 'Active' : (state === 'Disabled' ? 'Disabled' : 'Default');
+    const content = hasValue ? 'Filled' : 'Empty';
+    const tfVariant = findTfVariant(size, fieldState, content);
+    if (!tfVariant) {
+      console.warn('[OM DS] DatePicker: TextField variant not found for', size, fieldState, content);
+      return wrap;
+    }
+    const tfInst = tfVariant.createInstance();
+    tfInst.name = 'Trigger';
+    wrap.appendChild(tfInst);
+    await setLabelText(tfInst, 'Date');
+    await setFieldText(tfInst, hasValue ? 'May 7, 2026' : 'Select date', hasValue);
+    await bindSuffixIcon(tfInst);
+
+    if (state === 'Open') {
+      const calVariant = findCalVariant(hasValue ? 'Single Selected' : 'Default');
+      const calInst = calVariant.createInstance();
+      calInst.name = 'Popover';
+      wrap.appendChild(calInst);
+    }
+    return wrap;
+  }
+
+  const SIZES = ['Small', 'Medium', 'Default'];
+  const STATES = ['Default', 'Open', 'Disabled'];
+  const HASVAL = [false, true];
+  const allVariants = []; const meta = [];
+  for (const sz of SIZES) for (const st of STATES) for (const hv of HASVAL) {
+    const v = await makeVariant(sz, st, hv);
+    allVariants.push(v); meta.push({ size: sz, state: st, hv });
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Date Picker'; compSet.layoutMode = 'NONE'; compSet.fills = [];
+
+  // Layout: cols = State × Has Value (6), rows = Size (3)
+  const PAD_LEFT = 240, PAD_TOP = 200, PAD_RIGHT = 80, PAD_BOT = 80;
+  const COL_W = 380;
+  // row height is dynamic (Open variant is much taller because of the calendar)
+  const ROW_GAP = 60;
+
+  const cols = [];
+  let cIdx = 0;
+  for (const st of STATES) for (const hv of HASVAL) {
+    cols.push({ state: st, hv, x: PAD_LEFT + cIdx * COL_W, w: COL_W, name: `${st}${hv ? ' • Filled' : ''}` });
+    cIdx++;
+  }
+
+  // Compute per-row max height
+  const rowHeights = SIZES.map(sz => {
+    const variantsInRow = allVariants.filter((v, i) => meta[i].size === sz);
+    return Math.max(...variantsInRow.map(v => v.height));
+  });
+
+  const rowYs = [];
+  let cy = PAD_TOP;
+  for (let i = 0; i < SIZES.length; i++) {
+    rowYs.push(cy);
+    cy += rowHeights[i] + ROW_GAP;
+  }
+
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i]; const m = meta[i];
+    const col = cols.find(c => c.state === m.state && c.hv === m.hv);
+    const rowIdx = SIZES.indexOf(m.size);
+    if (!col) continue;
+    v.x = Math.round(col.x + (col.w - v.width) / 2);
+    v.y = Math.round(rowYs[rowIdx] + (rowHeights[rowIdx] - v.height) / 2);
+  }
+  compSet.resize(PAD_LEFT + cols.length * COL_W + PAD_RIGHT, cy + PAD_BOT);
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  const colGroups = [{ name: 'State × Has Value', x: PAD_LEFT, width: cols.length * COL_W,
+    sizes: cols.map(c => ({ name: c.name, x: c.x, width: c.w })) }];
+  const rowGroups = SIZES.map((sz, i) => ({ name: sz, y: rowYs[i],
+    states: [{ name: '', y: rowYs[i], height: rowHeights[i] }] }));
+
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Date Picker', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
+  figma.notify(`✅ Date Picker built: ${allVariants.length} variants (TextField + Calendar instances).`);
+}
+
+
+// =============================================================================
 // DROPDOWN — Single + Multi-Chips + Multi-Inline merged
 //   Type: Single | Multi-Chips | Multi-Inline
 //   Size: Small | Default | Large
@@ -10390,6 +10575,8 @@ async function rebuildAll() {
       await buildTabs2();
     } else if (figma.command === 'buildCalendar') {
       await buildCalendar();
+    } else if (figma.command === 'buildDatePicker') {
+      await buildDatePicker();
     } else if (figma.command === 'cleanupFallbackIcons') {
       await cleanupFallbackIcons();
     } else {

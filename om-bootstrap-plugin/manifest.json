@@ -39,6 +39,7 @@
     { "name": "Build Accordion (Molecule)", "command": "buildAccordion" },
     { "name": "Build Tabs Bar (Molecule)", "command": "buildTabs2" },
     { "name": "Build Calendar (Atom)", "command": "buildCalendar" },
+    { "name": "Build Date Picker (Molecule)", "command": "buildDatePicker" },
     { "name": "Cleanup _glyph Fallback Icons", "command": "cleanupFallbackIcons" },
     { "name": "Reset Text Styles", "command": "resetTextStyles" },
     { "name": "Reset (Delete OM Collections)", "command": "reset" }

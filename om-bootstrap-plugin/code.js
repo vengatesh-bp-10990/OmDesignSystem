@@ -9102,8 +9102,12 @@ async function buildSkeleton() {
 
 // =============================================================================
 // ACCORDION (Molecule) — collapsible row
-//   Style: Bordered | Borderless | Separated
-//   State: Collapsed | Expanded
+//   Style: Bordered (full-width card) | Inline (compact chevron + text pill)
+//   State: Default | Hover | Active
+//     Default = collapsed, idle
+//     Hover   = collapsed, hover bg
+//     Active  = open / clicked. Bordered shows expanded body; Inline keeps
+//               same compact form but with rotated chevron + active bg.
 // =============================================================================
 async function buildAccordion() {
   console.log('[OM DS] buildAccordion started');
@@ -9118,7 +9122,7 @@ async function buildAccordion() {
   const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Accordion');
   if (_exist) _exist.remove();
   for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Accordion')) n.remove();
-  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Style=(Bordered|Borderless|Separated), State=/.test(c.name))) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'COMPONENT' && /^Style=(Bordered|Inline|Borderless|Separated), State=/.test(c.name))) n.remove();
 
   const styles = await figma.getLocalTextStylesAsync();
   const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
@@ -9126,24 +9130,70 @@ async function buildAccordion() {
   await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
 
   const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
-  const iconDefault = required['icon/default'];
-  const chevDown = await findIconComp(iconsPage, ['chevron-down']) || await findOrCreateIconComponent('chevron-down', iconsPage, iconDefault);
+  const chevDown  = await findIconComp(iconsPage, ['chevron-down', 'caret-down', 'arrow-down']);
+  const chevRight = await findIconComp(iconsPage, ['chevron-right', 'caret-right', 'arrow-right']);
+  if (!chevDown || !chevRight) figma.notify('⚠️ Accordion: chevron icons not found in Icons page — chevrons will be hidden.');
+
+  function pickHeaderColors(style, state) {
+    const r = required;
+    if (style === 'Bordered') {
+      if (state === 'Hover')  return { bg: r['state/disabled-bg'], text: r['text/primary'], chev: r['text/primary']    };
+      if (state === 'Active') return { bg: r['brand/primary-subtle'] || r['surface/card'], text: r['text/primary'], chev: r['brand/primary'] };
+      return                       { bg: null,                       text: r['text/primary'], chev: r['text/secondary'] };
+    }
+    // Inline
+    if (state === 'Hover')  return { bg: r['brand/primary-subtle'] || r['state/disabled-bg'], text: r['brand/primary'], chev: r['brand/primary'] };
+    if (state === 'Active') return { bg: r['brand/primary-subtle'] || r['state/disabled-bg'], text: r['brand/primary'], chev: r['brand/primary'] };
+    return                       { bg: null,                                                    text: r['brand/primary'], chev: r['brand/primary'] };
+  }
 
   async function makeVariant(style, state) {
-    const W = 420;
-    const isExpanded = state === 'Expanded';
+    const isOpen = (state === 'Active');
+    const isInline = (style === 'Inline');
+    const colors = pickHeaderColors(style, state);
 
     const comp = figma.createComponent();
     comp.name = `Style=${style}, State=${state}`;
     comp.layoutMode = 'VERTICAL';
     comp.itemSpacing = 0;
-    comp.cornerRadius = style === 'Borderless' ? 0 : 8;
+    comp.cornerRadius = 8;
     comp.clipsContent = true;
-    if (style === 'Bordered' || style === 'Separated') {
-      comp.strokes = [paintForVar(required['border/default'])]; comp.strokeWeight = 1; comp.strokeAlign = 'INSIDE';
+    comp.fills = [];
+
+    if (isInline) {
+      // Inline pill: hug width, no border, chevron + text + (optional) bg
+      comp.layoutMode = 'HORIZONTAL';
+      comp.counterAxisAlignItems = 'CENTER';
+      comp.itemSpacing = 6;
+      comp.paddingLeft = comp.paddingRight = 10;
+      comp.paddingTop = comp.paddingBottom = 6;
+      comp.primaryAxisSizingMode = 'AUTO';
+      comp.counterAxisSizingMode = 'AUTO';
+      comp.fills = colors.bg ? [paintForVar(colors.bg)] : [];
+
+      // Chevron leads
+      const chevSrc = isOpen ? chevDown : chevRight;
+      if (chevSrc) {
+        const chev = chevSrc.createInstance();
+        chev.name = 'Chevron';
+        resizeIconInstance(chev, 16);
+        bindIconColorForm(chev, colors.chev);
+        comp.appendChild(chev);
+        try { chev.layoutSizingHorizontal = 'FIXED'; chev.layoutSizingVertical = 'FIXED'; } catch (e) {}
+      }
+      const txt = figma.createText();
+      if (styleByName['Body/Default']) await txt.setTextStyleIdAsync(styleByName['Body/Default'].id);
+      txt.characters = `${state} State`;
+      txt.fills = [paintForVar(colors.text)];
+      txt.textAutoResize = 'WIDTH_AND_HEIGHT';
+      comp.appendChild(txt);
+      return { comp };
     }
-    comp.fills = style === 'Separated' ? [paintForVar(required['surface/card'])] : [];
-    // Establish width FIRST, then re-enable primary-axis hug so it grows with children
+
+    // Bordered: full-width container with header + (when Active) expanded body
+    const W = 420;
+    comp.strokes = [paintForVar(required['border/default'])]; comp.strokeWeight = 1; comp.strokeAlign = 'INSIDE';
+    // Establish width FIRST, then re-enable primary-axis hug so children dictate height
     comp.resize(W, 1);
     comp.counterAxisSizingMode = 'FIXED';
     comp.primaryAxisSizingMode = 'AUTO';
@@ -9157,35 +9207,35 @@ async function buildAccordion() {
     header.itemSpacing = 12;
     header.paddingLeft = header.paddingRight = 16;
     header.paddingTop = header.paddingBottom = 14;
-    header.fills = [];
+    header.fills = colors.bg ? [paintForVar(colors.bg)] : [];
     comp.appendChild(header);
     try { header.layoutSizingHorizontal = 'FILL'; header.layoutSizingVertical = 'HUG'; } catch (e) {}
 
     const title = figma.createText();
     if (styleByName['Body/Default']) await title.setTextStyleIdAsync(styleByName['Body/Default'].id);
     title.characters = 'Section title';
-    title.fills = [paintForVar(required['text/primary'])];
+    title.fills = [paintForVar(colors.text)];
     title.textAutoResize = 'WIDTH_AND_HEIGHT';
     header.appendChild(title);
 
-    const chev = chevDown.createInstance();
-    chev.name = 'Chevron';
-    resizeIconInstance(chev, 16);
-    bindIconColorForm(chev, required['text/secondary']);
-    if (isExpanded) chev.rotation = 180;
-    header.appendChild(chev);
-    try { chev.layoutSizingHorizontal = 'FIXED'; chev.layoutSizingVertical = 'FIXED'; } catch (e) {}
+    const chevSrc = isOpen ? chevDown : chevRight;
+    if (chevSrc) {
+      const chev = chevSrc.createInstance();
+      chev.name = 'Chevron';
+      resizeIconInstance(chev, 16);
+      bindIconColorForm(chev, colors.chev);
+      header.appendChild(chev);
+      try { chev.layoutSizingHorizontal = 'FIXED'; chev.layoutSizingVertical = 'FIXED'; } catch (e) {}
+    }
 
-    if (isExpanded) {
-      // Internal divider (full-width)
-      if (style === 'Bordered' || style === 'Separated') {
-        const div = figma.createFrame();
-        div.name = 'Divider';
-        div.fills = [paintForVar(required['border/default'])];
-        div.resize(W, 1);
-        comp.appendChild(div);
-        try { div.layoutSizingHorizontal = 'FILL'; div.layoutSizingVertical = 'FIXED'; } catch (e) {}
-      }
+    if (isOpen) {
+      // Internal divider
+      const div = figma.createFrame();
+      div.name = 'Divider';
+      div.fills = [paintForVar(required['border/default'])];
+      div.resize(W, 1);
+      comp.appendChild(div);
+      try { div.layoutSizingHorizontal = 'FILL'; div.layoutSizingVertical = 'FIXED'; } catch (e) {}
 
       // Body
       const body = figma.createFrame();
@@ -9210,8 +9260,8 @@ async function buildAccordion() {
     return { comp };
   }
 
-  const STYLES = ['Bordered', 'Borderless', 'Separated'];
-  const STATES = ['Collapsed', 'Expanded'];
+  const STYLES = ['Bordered', 'Inline'];
+  const STATES = ['Default', 'Hover', 'Active'];
   const allVariants = []; const variantMeta = [];
   for (const style of STYLES) for (const state of STATES) {
     const r = await makeVariant(style, state);
@@ -9222,18 +9272,23 @@ async function buildAccordion() {
   compSet.name = 'Accordion'; compSet.layoutMode = 'NONE'; compSet.fills = [];
 
   const PAD_LEFT = 220, PAD_TOP = 160, PAD_RIGHT = 56, PAD_BOT = 56;
-  const COL_W = 480, ROW_H = 200;
+  const COL_W = 480, ROW_H = 220, GROUP_GAP = 32;
   const colGroups = [{ name: 'State', x: PAD_LEFT, width: COL_W * STATES.length,
     sizes: STATES.map((s, i) => ({ name: s, x: PAD_LEFT + i * COL_W, width: COL_W })) }];
-  const rowGroups = STYLES.map((s, i) => ({ name: s, y: PAD_TOP + i * ROW_H, states: [{ name: '', y: PAD_TOP + i * ROW_H, height: ROW_H }] }));
+  const rowGroups = [];
+  let cy = PAD_TOP;
+  for (const style of STYLES) {
+    rowGroups.push({ name: style, y: cy, states: [{ name: '', y: cy, height: ROW_H }] });
+    cy += ROW_H + GROUP_GAP;
+  }
   for (let i = 0; i < allVariants.length; i++) {
     const v = allVariants[i]; const m = variantMeta[i];
     const colIdx = STATES.indexOf(m.state);
-    const rowIdx = STYLES.indexOf(m.style);
+    const rg = rowGroups.find(r => r.name === m.style);
     v.x = Math.round(PAD_LEFT + colIdx * COL_W + (COL_W - v.width) / 2);
-    v.y = Math.round(PAD_TOP + rowIdx * ROW_H + 20);
+    v.y = Math.round(rg.y + 20);
   }
-  compSet.resize(PAD_LEFT + STATES.length * COL_W + PAD_RIGHT, PAD_TOP + STYLES.length * ROW_H + PAD_BOT);
+  compSet.resize(PAD_LEFT + STATES.length * COL_W + PAD_RIGHT, cy + PAD_BOT);
   autoPositionBelow(moleculesPage, compSet, 120);
 
   await decorateComponentSet({

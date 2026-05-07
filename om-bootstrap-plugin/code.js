@@ -7967,9 +7967,12 @@ async function buildTabs() {
     const atomsPage = figma.root.children.find(p => p.name.includes('Atoms'));
     return atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Badge');
   })());
-  function findBadgeVariant() {
+  function findBadgeVariant(preferColor) {
     if (!badgeSet) return null;
-    return badgeSet.children.find(c => /Variant=Subtle/i.test(c.name) && /Color=Primary/i.test(c.name) && /Size=Small/i.test(c.name))
+    const want = preferColor || 'Primary';
+    return badgeSet.children.find(c => /Variant=Subtle/i.test(c.name) && new RegExp(`Color=${want}`, 'i').test(c.name) && /Size=Small/i.test(c.name))
+        || badgeSet.children.find(c => /Variant=Subtle/i.test(c.name) && new RegExp(`Color=${want}`, 'i').test(c.name))
+        || badgeSet.children.find(c => /Variant=Subtle/i.test(c.name) && /Color=Primary/i.test(c.name) && /Size=Small/i.test(c.name))
         || badgeSet.children.find(c => /Variant=Subtle/i.test(c.name) && /Color=Primary/i.test(c.name))
         || badgeSet.defaultVariant
         || badgeSet.children[0];
@@ -7998,14 +8001,14 @@ async function buildTabs() {
       const text = state === 'Active' ? required['text/primary'] : required['text/secondary'];
       return { bg, text, border: state === 'Active' ? required['border/default'] : null, indicator: null };
     }
-    // Pill
+    // Pill — soft, surface-toned (active = white pill on grey container, brand text + counter)
     const bg =
-      state === 'Active' ? required['brand/primary'] :
-      state === 'Hover'  ? required['brand/primary-subtle'] :
+      state === 'Active' ? required['surface/card'] :
+      state === 'Hover'  ? required['state/disabled-bg'] :
                             null;
     const text =
-      state === 'Active' ? (required['brand/on-primary'] || required['surface/card']) :
-      state === 'Hover'  ? required['brand/primary'] :
+      state === 'Active' ? required['brand/primary'] :
+      state === 'Hover'  ? required['text/primary'] :
                             required['text/secondary'];
     return { bg, text, border: null, indicator: null };
   }
@@ -8056,9 +8059,11 @@ async function buildTabs() {
     label.textAutoResize = 'WIDTH_AND_HEIGHT';
     row.appendChild(label);
 
-    // Trailing badge instance (or fallback dot)
+    // Trailing badge instance (or fallback dot). Pill prefers Primary subtle
+    // counter, Line/Boxy use Neutral so the badge doesn't compete with the
+    // active underline / surface.
     let badgeNode = null;
-    const bv = findBadgeVariant();
+    const bv = findBadgeVariant(style === 'Pill' ? 'Primary' : 'Neutral');
     if (bv) {
       const inst = bv.createInstance();
       inst.name = 'Badge';

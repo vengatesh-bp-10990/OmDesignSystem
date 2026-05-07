@@ -10905,6 +10905,675 @@ async function buildDateTimePicker() {
 
 
 // =============================================================================
+// MODAL / DIALOG (molecule)
+//   Size: Small (480) | Medium (560) | Large (720)
+//   Layout: Default (title + body + footer) | Confirm (icon + title + body + footer)
+//   Status (only for Confirm layout): Info | Success | Warning | Danger
+// Composes real Button instances for footer actions.
+// =============================================================================
+async function buildModal() {
+  console.log('[OM DS] buildModal started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules')) || figma.currentPage;
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || moleculesPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Modal');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Modal')) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+
+  const buttonSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Button');
+  if (!buttonSet) { figma.notify('⚠️ Button not found. Run "Build Button" first.'); return; }
+
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const closeIc = await findIconComp(iconsPage, ['x', 'close', 'x-circle']);
+  const infoIc = await findIconComp(iconsPage, ['info', 'info-circle']);
+  const successIc = await findIconComp(iconsPage, ['check-circle', 'check']);
+  const warningIc = await findIconComp(iconsPage, ['alert-triangle', 'warning']);
+  const dangerIc = await findIconComp(iconsPage, ['alert-circle', 'x-octagon']);
+
+  function findButton(color, size, state) {
+    return buttonSet.children.find(c => c.name === `Type=Default, Color=${color}, Size=${size}, State=${state}`)
+        || buttonSet.children.find(c => c.name === `Type=Default, Color=${color}, Size=Default, State=Default`);
+  }
+  async function setButtonText(inst, txt) {
+    const t = inst.findOne(n => n.type === 'TEXT');
+    if (!t) return;
+    try { await figma.loadFontAsync(t.fontName); } catch (e) {}
+    try { t.characters = txt; } catch (e) {}
+  }
+
+  function statusInfo(status) {
+    if (status === 'Success') return { icon: successIc, color: required['status/success'], primaryBtn: 'Primary' };
+    if (status === 'Warning') return { icon: warningIc, color: required['status/warning'], primaryBtn: 'Primary' };
+    if (status === 'Danger')  return { icon: dangerIc,  color: required['status/danger'],  primaryBtn: 'Danger' };
+    return { icon: infoIc, color: required['status/info'], primaryBtn: 'Primary' };
+  }
+
+  const SIZE_W = { Small: 480, Medium: 560, Large: 720 };
+
+  async function makeVariant(size, layout, status) {
+    const wrap = figma.createComponent();
+    wrap.name = `Size=${size}, Layout=${layout}, Status=${status}`;
+    wrap.layoutMode = 'VERTICAL';
+    wrap.primaryAxisSizingMode = 'AUTO';
+    wrap.counterAxisSizingMode = 'FIXED';
+    wrap.itemSpacing = 0;
+    wrap.fills = [paintForVar(required['surface/card'])];
+    wrap.strokes = [paintForVar(required['border/default'])];
+    wrap.strokeWeight = 1;
+    wrap.strokeAlign = 'INSIDE';
+    wrap.cornerRadius = 12;
+    try {
+      wrap.effects = [{ type: 'DROP_SHADOW', color: { r: 0.06, g: 0.07, b: 0.12, a: 0.16 }, offset: { x: 0, y: 16 }, radius: 40, spread: -8, visible: true, blendMode: 'NORMAL' }];
+    } catch (e) {}
+    wrap.resize(SIZE_W[size], 200);
+
+    // Header
+    const header = figma.createFrame();
+    header.name = 'Header';
+    header.layoutMode = 'HORIZONTAL';
+    header.primaryAxisSizingMode = 'FIXED';
+    header.counterAxisSizingMode = 'AUTO';
+    header.primaryAxisAlignItems = 'SPACE_BETWEEN';
+    header.counterAxisAlignItems = 'CENTER';
+    header.itemSpacing = 12;
+    header.paddingLeft = header.paddingRight = 24;
+    header.paddingTop = 24; header.paddingBottom = 0;
+    header.fills = [];
+    wrap.appendChild(header);
+    try { header.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    const titleRow = figma.createFrame();
+    titleRow.layoutMode = 'HORIZONTAL';
+    titleRow.primaryAxisSizingMode = 'AUTO';
+    titleRow.counterAxisSizingMode = 'AUTO';
+    titleRow.counterAxisAlignItems = 'CENTER';
+    titleRow.itemSpacing = 12;
+    titleRow.fills = [];
+    header.appendChild(titleRow);
+
+    if (layout === 'Confirm') {
+      const info = statusInfo(status);
+      if (info.icon) {
+        const ic = info.icon.createInstance();
+        ic.name = 'Status Icon';
+        resizeIconInstance(ic, 24);
+        bindIconColorForm(ic, info.color);
+        titleRow.appendChild(ic);
+        try { ic.layoutSizingHorizontal = 'FIXED'; ic.layoutSizingVertical = 'FIXED'; } catch (e) {}
+      }
+    }
+
+    const title = figma.createText();
+    const titleStyle = styleByName['Heading/H4'] || styleByName['Heading/H5'];
+    if (titleStyle) await title.setTextStyleIdAsync(titleStyle.id);
+    title.characters = layout === 'Confirm'
+      ? (status === 'Danger' ? 'Delete this item?' : status === 'Warning' ? 'Confirm action' : status === 'Success' ? 'Action complete' : 'Are you sure?')
+      : 'Modal title';
+    title.fills = [paintForVar(required['text/primary'])];
+    title.textAutoResize = 'WIDTH_AND_HEIGHT';
+    titleRow.appendChild(title);
+
+    if (closeIc) {
+      const close = closeIc.createInstance();
+      close.name = 'Close';
+      resizeIconInstance(close, 20);
+      bindIconColorForm(close, required['icon/subtle']);
+      header.appendChild(close);
+      try { close.layoutSizingHorizontal = 'FIXED'; close.layoutSizingVertical = 'FIXED'; } catch (e) {}
+    }
+
+    // Body
+    const body = figma.createFrame();
+    body.name = 'Body';
+    body.layoutMode = 'VERTICAL';
+    body.primaryAxisSizingMode = 'AUTO';
+    body.counterAxisSizingMode = 'AUTO';
+    body.itemSpacing = 8;
+    body.paddingLeft = body.paddingRight = 24;
+    body.paddingTop = 16; body.paddingBottom = 24;
+    body.fills = [];
+    wrap.appendChild(body);
+    try { body.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    const bodyText = figma.createText();
+    const bStyle = styleByName['Body/Default'];
+    if (bStyle) await bodyText.setTextStyleIdAsync(bStyle.id);
+    bodyText.characters = layout === 'Confirm'
+      ? 'This action cannot be undone. Please confirm to proceed.'
+      : 'This is the modal body content area. Place your form fields, descriptions, or supporting content here.';
+    bodyText.fills = [paintForVar(required['text/secondary'])];
+    bodyText.textAutoResize = 'HEIGHT';
+    body.appendChild(bodyText);
+    try { bodyText.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    // Footer
+    const footer = figma.createFrame();
+    footer.name = 'Footer';
+    footer.layoutMode = 'HORIZONTAL';
+    footer.primaryAxisSizingMode = 'FIXED';
+    footer.counterAxisSizingMode = 'AUTO';
+    footer.primaryAxisAlignItems = 'MAX';
+    footer.counterAxisAlignItems = 'CENTER';
+    footer.itemSpacing = 8;
+    footer.paddingLeft = footer.paddingRight = 24;
+    footer.paddingTop = 16; footer.paddingBottom = 20;
+    footer.fills = [paintForVar(required['surface/base'])];
+    wrap.appendChild(footer);
+    try { footer.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    const cancelVariant = findButton('Secondary', 'Default', 'Default');
+    const confirmColor = layout === 'Confirm' ? statusInfo(status).primaryBtn : 'Primary';
+    const confirmVariant = findButton(confirmColor, 'Default', 'Default');
+    if (cancelVariant) {
+      const c = cancelVariant.createInstance(); c.name = 'Cancel';
+      footer.appendChild(c);
+      await setButtonText(c, 'Cancel');
+    }
+    if (confirmVariant) {
+      const ok = confirmVariant.createInstance(); ok.name = 'Confirm';
+      footer.appendChild(ok);
+      await setButtonText(ok, layout === 'Confirm' && status === 'Danger' ? 'Delete' : 'Confirm');
+    }
+
+    return wrap;
+  }
+
+  const SIZES = ['Small', 'Medium', 'Large'];
+  const allVariants = []; const meta = [];
+  // Default layout: 3 variants (one per size)
+  for (const sz of SIZES) {
+    const v = await makeVariant(sz, 'Default', 'Info');
+    allVariants.push(v); meta.push({ size: sz, layout: 'Default', status: 'Info' });
+  }
+  // Confirm layout: 4 statuses × Medium size only (most common)
+  for (const st of ['Info', 'Success', 'Warning', 'Danger']) {
+    const v = await makeVariant('Medium', 'Confirm', st);
+    allVariants.push(v); meta.push({ size: 'Medium', layout: 'Confirm', status: st });
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Modal'; compSet.layoutMode = 'NONE'; compSet.fills = [];
+
+  const PAD_LEFT = 240, PAD_TOP = 200, PAD_RIGHT = 80, PAD_BOT = 80;
+  const COL_W = 800, ROW_H = 320, GROUP_GAP = 40;
+
+  // Layout: stack all vertically grouped by layout
+  let cy = PAD_TOP;
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i];
+    v.x = PAD_LEFT;
+    v.y = cy;
+    cy += v.height + GROUP_GAP;
+  }
+  compSet.resize(PAD_LEFT + COL_W + PAD_RIGHT, cy + PAD_BOT);
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  figma.notify(`✅ Modal built: ${allVariants.length} variants (Default + Confirm × statuses).`);
+}
+
+
+// =============================================================================
+// STEPPER (molecule)
+//   Orientation: Horizontal | Vertical
+//   Size: Default (32px circle) | Small (24px circle)
+//   Step States used: Completed (filled brand + check), Active (brand outline + number),
+//                     Inactive (neutral outline + number)
+// Each variant shows 4 steps with Step 2 active.
+// =============================================================================
+async function buildStepper() {
+  console.log('[OM DS] buildStepper started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules')) || figma.currentPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Stepper');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Stepper')) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const checkIc = await findIconComp(iconsPage, ['check']);
+
+  // Step circle (state: Completed | Active | Inactive)
+  async function makeStepCircle(state, num, sizePx, fontStyleName) {
+    const c = figma.createFrame();
+    c.layoutMode = 'HORIZONTAL';
+    c.primaryAxisSizingMode = 'FIXED';
+    c.counterAxisSizingMode = 'FIXED';
+    c.primaryAxisAlignItems = 'CENTER';
+    c.counterAxisAlignItems = 'CENTER';
+    c.resize(sizePx, sizePx);
+    c.cornerRadius = sizePx / 2;
+    if (state === 'Completed') {
+      c.fills = [paintForVar(required['brand/primary'])];
+      c.strokes = [];
+    } else if (state === 'Active') {
+      c.fills = [paintForVar(required['surface/card'])];
+      c.strokes = [paintForVar(required['brand/primary'])];
+      c.strokeWeight = 2;
+      c.strokeAlign = 'INSIDE';
+    } else {
+      c.fills = [paintForVar(required['surface/card'])];
+      c.strokes = [paintForVar(required['border/strong'])];
+      c.strokeWeight = 1;
+      c.strokeAlign = 'INSIDE';
+    }
+    if (state === 'Completed' && checkIc) {
+      const ic = checkIc.createInstance();
+      resizeIconInstance(ic, Math.round(sizePx * 0.55));
+      bindIconColorForm(ic, required['brand/on-primary'] || required['surface/card']);
+      c.appendChild(ic);
+    } else {
+      const t = figma.createText();
+      const fStyle = styleByName[fontStyleName] || styleByName['Body/Small'];
+      if (fStyle) await t.setTextStyleIdAsync(fStyle.id);
+      t.characters = String(num);
+      const colorVar = state === 'Active' ? required['brand/primary'] : required['text/secondary'];
+      t.fills = [paintForVar(colorVar)];
+      t.textAutoResize = 'WIDTH_AND_HEIGHT';
+      c.appendChild(t);
+    }
+    return c;
+  }
+
+  async function makeStep(num, state, label, orientation, sizePx, fontName) {
+    const wrap = figma.createFrame();
+    wrap.layoutMode = orientation === 'Horizontal' ? 'HORIZONTAL' : 'HORIZONTAL';
+    wrap.primaryAxisSizingMode = 'AUTO';
+    wrap.counterAxisSizingMode = 'AUTO';
+    wrap.counterAxisAlignItems = 'CENTER';
+    wrap.itemSpacing = 12;
+    wrap.fills = [];
+    const circle = await makeStepCircle(state, num, sizePx, fontName);
+    wrap.appendChild(circle);
+    const t = figma.createText();
+    const lStyle = styleByName['Label/Default'] || styleByName['Body/Default'];
+    if (lStyle) await t.setTextStyleIdAsync(lStyle.id);
+    t.characters = label;
+    const lblColor = state === 'Active' ? required['text/primary']
+                    : state === 'Completed' ? required['text/primary']
+                    : required['text/secondary'];
+    t.fills = [paintForVar(lblColor)];
+    t.textAutoResize = 'WIDTH_AND_HEIGHT';
+    wrap.appendChild(t);
+    return wrap;
+  }
+
+  function makeConnector(orientation, isCompleted) {
+    const ln = figma.createFrame();
+    ln.fills = [paintForVar(isCompleted ? required['brand/primary'] : required['border/default'])];
+    if (orientation === 'Horizontal') {
+      ln.resize(40, 2);
+    } else {
+      ln.resize(2, 32);
+    }
+    return ln;
+  }
+
+  async function makeVariant(orientation, size) {
+    const sizePx = size === 'Small' ? 24 : 32;
+    const fontName = size === 'Small' ? 'Body/Small' : 'Body/Default';
+    const wrap = figma.createComponent();
+    wrap.name = `Orientation=${orientation}, Size=${size}`;
+    wrap.layoutMode = orientation === 'Horizontal' ? 'HORIZONTAL' : 'VERTICAL';
+    wrap.primaryAxisSizingMode = 'AUTO';
+    wrap.counterAxisSizingMode = 'AUTO';
+    wrap.counterAxisAlignItems = orientation === 'Horizontal' ? 'CENTER' : 'MIN';
+    wrap.itemSpacing = orientation === 'Horizontal' ? 8 : 4;
+    wrap.fills = [];
+
+    const STEPS = [
+      { num: 1, state: 'Completed', label: 'Account' },
+      { num: 2, state: 'Active',    label: 'Profile' },
+      { num: 3, state: 'Inactive',  label: 'Preferences' },
+      { num: 4, state: 'Inactive',  label: 'Confirm' },
+    ];
+
+    for (let i = 0; i < STEPS.length; i++) {
+      const s = STEPS[i];
+      const step = await makeStep(s.num, s.state, s.label, orientation, sizePx, fontName);
+      wrap.appendChild(step);
+      if (i < STEPS.length - 1) {
+        wrap.appendChild(makeConnector(orientation, s.state === 'Completed'));
+      }
+    }
+    return wrap;
+  }
+
+  const allVariants = []; const meta = [];
+  for (const o of ['Horizontal', 'Vertical']) {
+    for (const sz of ['Default', 'Small']) {
+      allVariants.push(await makeVariant(o, sz));
+      meta.push({ orientation: o, size: sz });
+    }
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Stepper'; compSet.layoutMode = 'NONE'; compSet.fills = [];
+
+  const PAD_LEFT = 240, PAD_TOP = 200, PAD_RIGHT = 80, PAD_BOT = 80;
+  let cy = PAD_TOP;
+  let maxW = 0;
+  for (const v of allVariants) {
+    v.x = PAD_LEFT; v.y = cy;
+    cy += v.height + 60;
+    if (v.width > maxW) maxW = v.width;
+  }
+  compSet.resize(PAD_LEFT + maxW + PAD_RIGHT, cy + PAD_BOT);
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  figma.notify(`✅ Stepper built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
+// SIDEBAR / NAV (molecule)
+//   Width: Expanded (240) | Collapsed (64)
+//   Composes Menu Item instances (Expanded) or just icons (Collapsed).
+// =============================================================================
+async function buildSidebar() {
+  console.log('[OM DS] buildSidebar started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules')) || figma.currentPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Sidebar');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Sidebar')) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+
+  const miSet = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Menu Item');
+  if (!miSet) { figma.notify('⚠️ Menu Item not found. Run "Build Menu Item" first.'); return; }
+
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const homeIc = await findIconComp(iconsPage, ['home']);
+  const usersIc = await findIconComp(iconsPage, ['users', 'user']);
+  const settingsIc = await findIconComp(iconsPage, ['settings', 'cog', 'gear']);
+  const chartIc = await findIconComp(iconsPage, ['chart', 'bar-chart', 'analytics']);
+
+  function findMenuItem(state) {
+    return miSet.children.find(c => c.name === `Size=Default, Type=Default, State=${state}`)
+        || miSet.children.find(c => c.name.includes(`State=${state}`))
+        || miSet.children[0];
+  }
+  async function setMiLabel(inst, txt) {
+    const t = inst.findOne(n => n.type === 'TEXT' && /label|text/i.test(n.name));
+    const target = t || inst.findOne(n => n.type === 'TEXT');
+    if (!target) return;
+    try { await figma.loadFontAsync(target.fontName); } catch (e) {}
+    try { target.characters = txt; } catch (e) {}
+  }
+
+  async function makeIconRow(icon, isActive) {
+    const row = figma.createFrame();
+    row.layoutMode = 'HORIZONTAL';
+    row.primaryAxisSizingMode = 'FIXED';
+    row.counterAxisSizingMode = 'FIXED';
+    row.primaryAxisAlignItems = 'CENTER';
+    row.counterAxisAlignItems = 'CENTER';
+    row.resize(40, 40);
+    row.cornerRadius = 8;
+    row.fills = isActive ? [paintForVar(required['brand/primary-subtle'] || required['brand/primary-muted'])] : [];
+    if (icon) {
+      const ic = icon.createInstance();
+      resizeIconInstance(ic, 20);
+      bindIconColorForm(ic, isActive ? required['brand/primary'] : required['icon/default']);
+      row.appendChild(ic);
+    }
+    return row;
+  }
+
+  async function makeVariant(width) {
+    const wrap = figma.createComponent();
+    wrap.name = `Width=${width}`;
+    wrap.layoutMode = 'VERTICAL';
+    wrap.primaryAxisSizingMode = 'FIXED';
+    wrap.counterAxisSizingMode = 'FIXED';
+    wrap.counterAxisAlignItems = width === 'Collapsed' ? 'CENTER' : 'MIN';
+    wrap.itemSpacing = 4;
+    wrap.paddingLeft = wrap.paddingRight = width === 'Collapsed' ? 12 : 12;
+    wrap.paddingTop = wrap.paddingBottom = 16;
+    wrap.fills = [paintForVar(required['surface/card'])];
+    wrap.strokes = [paintForVar(required['border/default'])];
+    wrap.strokeWeight = 1;
+    wrap.strokeAlign = 'INSIDE';
+    wrap.resize(width === 'Collapsed' ? 64 : 240, 480);
+
+    // Logo / brand area
+    const brand = figma.createFrame();
+    brand.layoutMode = 'HORIZONTAL';
+    brand.primaryAxisSizingMode = 'AUTO';
+    brand.counterAxisSizingMode = 'AUTO';
+    brand.counterAxisAlignItems = 'CENTER';
+    brand.itemSpacing = 8;
+    brand.paddingLeft = brand.paddingRight = 8;
+    brand.paddingTop = brand.paddingBottom = 8;
+    brand.fills = [];
+    const dot = figma.createFrame();
+    dot.resize(24, 24); dot.cornerRadius = 6;
+    dot.fills = [paintForVar(required['brand/primary'])];
+    brand.appendChild(dot);
+    if (width === 'Expanded') {
+      const t = figma.createText();
+      const ts = styleByName['Heading/H6'] || styleByName['Label/Default'];
+      if (ts) await t.setTextStyleIdAsync(ts.id);
+      t.characters = 'OM Design';
+      t.fills = [paintForVar(required['text/primary'])];
+      t.textAutoResize = 'WIDTH_AND_HEIGHT';
+      brand.appendChild(t);
+    }
+    wrap.appendChild(brand);
+
+    // Spacer
+    const spacer = figma.createFrame();
+    spacer.resize(1, 8); spacer.fills = [];
+    wrap.appendChild(spacer);
+
+    const ITEMS = [
+      { icon: homeIc,     label: 'Dashboard', active: false },
+      { icon: chartIc,    label: 'Analytics', active: true  },
+      { icon: usersIc,    label: 'Team',      active: false },
+      { icon: settingsIc, label: 'Settings',  active: false },
+    ];
+
+    for (const item of ITEMS) {
+      if (width === 'Collapsed') {
+        wrap.appendChild(await makeIconRow(item.icon, item.active));
+      } else {
+        const variant = findMenuItem(item.active ? 'Active' : 'Default');
+        if (variant) {
+          const inst = variant.createInstance();
+          inst.name = item.label;
+          wrap.appendChild(inst);
+          try { inst.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+          await setMiLabel(inst, item.label);
+        }
+      }
+    }
+    return wrap;
+  }
+
+  const allVariants = [];
+  for (const w of ['Expanded', 'Collapsed']) {
+    allVariants.push(await makeVariant(w));
+  }
+
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Sidebar'; compSet.layoutMode = 'NONE'; compSet.fills = [];
+
+  const PAD_LEFT = 240, PAD_TOP = 200, PAD_RIGHT = 80, PAD_BOT = 80;
+  let cx = PAD_LEFT;
+  for (const v of allVariants) {
+    v.x = cx; v.y = PAD_TOP;
+    cx += v.width + 80;
+  }
+  compSet.resize(cx + PAD_RIGHT, PAD_TOP + 480 + PAD_BOT);
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  figma.notify(`✅ Sidebar built: ${allVariants.length} variants (Expanded + Collapsed).`);
+}
+
+
+// =============================================================================
+// EMPTY STATE (molecule)
+//   Size: Compact | Default | Spacious
+//   Has Action: false | true (composes Button instance)
+// =============================================================================
+async function buildEmptyState() {
+  console.log('[OM DS] buildEmptyState started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+  const required = await resolveFormTokens();
+
+  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules')) || figma.currentPage;
+  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms')) || moleculesPage;
+  await figma.setCurrentPageAsync(moleculesPage);
+
+  const _exist = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Empty State');
+  if (_exist) _exist.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && c.name === 'Empty State')) n.remove();
+
+  const styles = await figma.getLocalTextStylesAsync();
+  const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+
+  const buttonSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Button');
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  const inboxIc = await findIconComp(iconsPage, ['inbox', 'archive', 'folder', 'box']);
+
+  function findButton(color, size) {
+    if (!buttonSet) return null;
+    return buttonSet.children.find(c => c.name === `Type=Default, Color=${color}, Size=${size}, State=Default`)
+        || buttonSet.children.find(c => c.name === `Type=Default, Color=${color}, Size=Default, State=Default`);
+  }
+  async function setButtonText(inst, txt) {
+    const t = inst.findOne(n => n.type === 'TEXT');
+    if (!t) return;
+    try { await figma.loadFontAsync(t.fontName); } catch (e) {}
+    try { t.characters = txt; } catch (e) {}
+  }
+
+  const SPECS = {
+    Compact:  { icon: 32, gap: 8,  pad: 24, title: 'Heading/H6', body: 'Body/Small',   btn: 'Small'   },
+    Default:  { icon: 56, gap: 12, pad: 40, title: 'Heading/H4', body: 'Body/Default', btn: 'Default' },
+    Spacious: { icon: 80, gap: 16, pad: 64, title: 'Heading/H3', body: 'Body/Default', btn: 'Default' },
+  };
+
+  async function makeVariant(size, hasAction) {
+    const spec = SPECS[size];
+    const wrap = figma.createComponent();
+    wrap.name = `Size=${size}, Has Action=${hasAction}`;
+    wrap.layoutMode = 'VERTICAL';
+    wrap.primaryAxisSizingMode = 'AUTO';
+    wrap.counterAxisSizingMode = 'AUTO';
+    wrap.primaryAxisAlignItems = 'CENTER';
+    wrap.counterAxisAlignItems = 'CENTER';
+    wrap.itemSpacing = spec.gap;
+    wrap.paddingLeft = wrap.paddingRight = spec.pad;
+    wrap.paddingTop = wrap.paddingBottom = spec.pad;
+    wrap.fills = [];
+
+    // Illustration / icon container
+    const iconWrap = figma.createFrame();
+    iconWrap.layoutMode = 'HORIZONTAL';
+    iconWrap.primaryAxisSizingMode = 'FIXED';
+    iconWrap.counterAxisSizingMode = 'FIXED';
+    iconWrap.primaryAxisAlignItems = 'CENTER';
+    iconWrap.counterAxisAlignItems = 'CENTER';
+    iconWrap.resize(spec.icon + 24, spec.icon + 24);
+    iconWrap.cornerRadius = (spec.icon + 24) / 2;
+    iconWrap.fills = [paintForVar(required['state/disabled-bg'])];
+    if (inboxIc) {
+      const ic = inboxIc.createInstance();
+      resizeIconInstance(ic, spec.icon);
+      bindIconColorForm(ic, required['icon/subtle']);
+      iconWrap.appendChild(ic);
+    }
+    wrap.appendChild(iconWrap);
+
+    const title = figma.createText();
+    const tStyle = styleByName[spec.title];
+    if (tStyle) await title.setTextStyleIdAsync(tStyle.id);
+    title.characters = 'No items yet';
+    title.fills = [paintForVar(required['text/primary'])];
+    title.textAutoResize = 'WIDTH_AND_HEIGHT';
+    title.textAlignHorizontal = 'CENTER';
+    wrap.appendChild(title);
+
+    const body = figma.createText();
+    const bStyle = styleByName[spec.body];
+    if (bStyle) await body.setTextStyleIdAsync(bStyle.id);
+    body.characters = 'Get started by creating your first item. It only takes a moment.';
+    body.fills = [paintForVar(required['text/secondary'])];
+    body.textAutoResize = 'HEIGHT';
+    body.textAlignHorizontal = 'CENTER';
+    body.resize(360, body.height);
+    wrap.appendChild(body);
+
+    if (hasAction) {
+      const variant = findButton('Primary', spec.btn);
+      if (variant) {
+        const btn = variant.createInstance();
+        btn.name = 'Action';
+        wrap.appendChild(btn);
+        await setButtonText(btn, 'Create item');
+      }
+    }
+    return wrap;
+  }
+
+  const allVariants = [];
+  for (const sz of ['Compact', 'Default', 'Spacious']) {
+    for (const ha of [false, true]) {
+      allVariants.push(await makeVariant(sz, ha));
+    }
+  }
+  const compSet = figma.combineAsVariants(allVariants, moleculesPage);
+  compSet.name = 'Empty State'; compSet.layoutMode = 'NONE'; compSet.fills = [];
+
+  const PAD_LEFT = 240, PAD_TOP = 200, PAD_RIGHT = 80, PAD_BOT = 80;
+  const COL_W = 460;
+  let cy = PAD_TOP;
+  for (let i = 0; i < allVariants.length; i++) {
+    const v = allVariants[i];
+    const colIdx = i % 2;
+    const rowIdx = Math.floor(i / 2);
+    v.x = PAD_LEFT + colIdx * COL_W;
+    if (colIdx === 0) cy = PAD_TOP + rowIdx * 360;
+    v.y = cy;
+  }
+  compSet.resize(PAD_LEFT + COL_W * 2 + PAD_RIGHT, PAD_TOP + 3 * 360 + PAD_BOT);
+  autoPositionBelow(moleculesPage, compSet, 120);
+
+  figma.notify(`✅ Empty State built: ${allVariants.length} variants.`);
+}
+
+
+// =============================================================================
 // DROPDOWN — Single + Multi-Chips + Multi-Inline merged
 //   Type: Single | Multi-Chips | Multi-Inline
 //   Size: Small | Default | Large
@@ -11340,6 +12009,14 @@ async function rebuildAll() {
       await buildTimePicker();
     } else if (figma.command === 'buildDateTimePicker') {
       await buildDateTimePicker();
+    } else if (figma.command === 'buildModal') {
+      await buildModal();
+    } else if (figma.command === 'buildStepper') {
+      await buildStepper();
+    } else if (figma.command === 'buildSidebar') {
+      await buildSidebar();
+    } else if (figma.command === 'buildEmptyState') {
+      await buildEmptyState();
     } else if (figma.command === 'cleanupFallbackIcons') {
       await cleanupFallbackIcons();
     } else {

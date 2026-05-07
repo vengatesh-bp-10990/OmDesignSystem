@@ -4419,10 +4419,11 @@ async function buildTooltip() {
       try { hd.layoutSizingHorizontal = 'FIXED'; hd.layoutSizingVertical = 'HUG'; } catch (e) {}
     }
 
-    // Content row — icon + message side by side (only horizontal if there's an icon
-    // or if we're in horizontal bubble mode); otherwise the message goes directly
-    // in the bubble.
+    // Content row — when stacked AND has icon, build [icon | right-column]
+    // where right-column stacks message + action vertically. This ensures the
+    // action button's left edge aligns with the message text (not with the icon).
     let msgParent = bubble;
+    let rightCol = null;
     if (stacked && icon === 'Check' && checkIconComp) {
       const row = figma.createFrame();
       row.name = 'Content';
@@ -4436,16 +4437,34 @@ async function buildTooltip() {
       row.fills = [];
       bubble.appendChild(row);
       try { row.layoutSizingHorizontal = 'HUG'; row.layoutSizingVertical = 'HUG'; } catch (e) {}
-      msgParent = row;
+
+      // Right-side column (will hold message and the action)
+      rightCol = figma.createFrame();
+      rightCol.name = 'Body';
+      rightCol.layoutMode = 'VERTICAL';
+      rightCol.primaryAxisSizingMode = 'AUTO';
+      rightCol.counterAxisSizingMode = 'AUTO';
+      rightCol.primaryAxisAlignItems = 'MIN';
+      rightCol.counterAxisAlignItems = 'MIN';
+      rightCol.itemSpacing = spec.vGap;
+      rightCol.paddingLeft = rightCol.paddingRight = rightCol.paddingTop = rightCol.paddingBottom = 0;
+      rightCol.fills = [];
+
+      msgParent = row;  // icon goes here directly
+    } else if (stacked) {
+      // No icon — message + action both stack inside bubble; rightCol = bubble
+      rightCol = bubble;
     }
 
-    // Optional leading check icon (placed in msgParent so it sits inline with message)
+    // Optional leading check icon (placed in row so it sits inline with message column)
     if (icon === 'Check' && checkIconComp) {
       const ic = checkIconComp.createInstance();
       ic.resize(spec.icon, spec.icon);
       try { ic.layoutSizingHorizontal = 'FIXED'; ic.layoutSizingVertical = 'FIXED'; } catch (e) {}
       bindIconColor(ic, tt['icon']);
       msgParent.appendChild(ic);
+      // After adding the icon, append the right column (so layout = [icon | rightCol])
+      if (stacked && rightCol !== bubble) msgParent.appendChild(rightCol);
     }
 
     // Main message text — fixed max width with wrap
@@ -4460,20 +4479,22 @@ async function buildTooltip() {
     label.name = 'Message';
     label.textAutoResize = 'HEIGHT';
     label.resize(spec.maxTextWidth, label.height);
-    msgParent.appendChild(label);
+    // Place message in rightCol when stacked, otherwise inline in horizontal bubble
+    const labelHost = stacked ? rightCol : bubble;
+    labelHost.appendChild(label);
     try { label.layoutSizingHorizontal = 'FIXED'; label.layoutSizingVertical = 'HUG'; } catch (e) {}
 
-    // Optional Ghost button (uses your real Button/Ghost component)
+    // Optional Ghost button — placed inside rightCol so it aligns to message's left
     if (action === 'Button') {
       const ghost = findGhostBtn(size === 'Small' ? 'XS' : 'Small');
       if (ghost) {
-        // Wrap action in a row that fills bubble width so it can right-align
+        // Action row fills the rightCol width; button right-aligned within
         const actionRow = figma.createFrame();
         actionRow.name = 'Actions';
         actionRow.layoutMode = 'HORIZONTAL';
         actionRow.primaryAxisSizingMode = 'FIXED';
         actionRow.counterAxisSizingMode = 'AUTO';
-        actionRow.primaryAxisAlignItems = 'MAX';     // right align
+        actionRow.primaryAxisAlignItems = 'MAX';     // right align within column
         actionRow.counterAxisAlignItems = 'CENTER';
         actionRow.itemSpacing = 8;
         actionRow.paddingLeft = actionRow.paddingRight = 0;
@@ -4482,7 +4503,6 @@ async function buildTooltip() {
 
         const inst = ghost.createInstance();
         inst.name = 'Action';
-        // Set the label text on the instance
         try {
           const txt = inst.findOne(n => n.type === 'TEXT');
           if (txt) {
@@ -4491,7 +4511,10 @@ async function buildTooltip() {
           }
         } catch (e) {}
         actionRow.appendChild(inst);
-        bubble.appendChild(actionRow);
+
+        const actionHost = stacked ? rightCol : bubble;
+        actionHost.appendChild(actionRow);
+        // Width-fixed row matches its parent column's width
         try { actionRow.layoutSizingHorizontal = 'FILL'; actionRow.layoutSizingVertical = 'HUG'; } catch (e) {}
       }
     }

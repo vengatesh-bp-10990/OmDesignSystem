@@ -11520,29 +11520,53 @@ async function buildSidebar() {
   await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
   await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
 
-  const miSet = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Menu Item');
-  if (!miSet) { figma.notify('⚠️ Menu Item not found. Run "Build Menu Item" first.'); return; }
-
   const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
   const homeIc = await findIconComp(iconsPage, ['home']);
   const usersIc = await findIconComp(iconsPage, ['users', 'user']);
   const settingsIc = await findIconComp(iconsPage, ['settings', 'cog', 'gear']);
   const chartIc = await findIconComp(iconsPage, ['chart', 'bar-chart', 'analytics']);
+  const fileIc = await findIconComp(iconsPage, ['file', 'document']);
+  const folderIc = await findIconComp(iconsPage, ['folder']);
+  const bellIc = await findIconComp(iconsPage, ['bell', 'notification']);
+  const helpIc = await findIconComp(iconsPage, ['help', 'question', 'info']);
 
-  function findMenuItem(state) {
-    return miSet.children.find(c => c.name === `Size=Default, Type=Default, State=${state}`)
-        || miSet.children.find(c => c.name.includes(`State=${state}`))
-        || miSet.children[0];
-  }
-  async function setMiLabel(inst, txt) {
-    const t = inst.findOne(n => n.type === 'TEXT' && /label|text/i.test(n.name));
-    const target = t || inst.findOne(n => n.type === 'TEXT');
-    if (!target) return;
-    try { await figma.loadFontAsync(target.fontName); } catch (e) {}
-    try { target.characters = txt; } catch (e) {}
+  // Inline list-item row (Expanded)
+  async function makeListItem(icon, label, active) {
+    const row = figma.createFrame();
+    row.name = label;
+    row.layoutMode = 'HORIZONTAL';
+    row.primaryAxisSizingMode = 'FIXED';
+    row.counterAxisSizingMode = 'AUTO';
+    row.primaryAxisAlignItems = 'MIN';
+    row.counterAxisAlignItems = 'CENTER';
+    row.itemSpacing = 12;
+    row.paddingLeft = row.paddingRight = 12;
+    row.paddingTop = row.paddingBottom = 8;
+    row.cornerRadius = 8;
+    row.fills = active
+      ? [paintForVar(required['brand/primary-subtle'] || required['brand/primary-muted'] || required['surface/base'])]
+      : [];
+    row.resize(216, 36);
+    if (icon) {
+      const ic = icon.createInstance();
+      resizeIconInstance(ic, 18);
+      bindIconColorForm(ic, active ? required['brand/primary'] : required['icon/default']);
+      row.appendChild(ic);
+      try { ic.layoutSizingHorizontal = 'FIXED'; ic.layoutSizingVertical = 'FIXED'; } catch (e) {}
+    }
+    const t = figma.createText();
+    const ts = styleByName['Body/Default'] || styleByName['Label/Default'];
+    if (ts) await t.setTextStyleIdAsync(ts.id);
+    t.characters = label;
+    t.fills = [paintForVar(active ? required['brand/primary'] : required['text/primary'])];
+    t.textAutoResize = 'HEIGHT';
+    row.appendChild(t);
+    try { t.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    return row;
   }
 
-  async function makeIconRow(icon, isActive) {
+  // Inline icon-only row (Collapsed)
+  async function makeIconRow(icon, active) {
     const row = figma.createFrame();
     row.layoutMode = 'HORIZONTAL';
     row.primaryAxisSizingMode = 'FIXED';
@@ -11551,49 +11575,90 @@ async function buildSidebar() {
     row.counterAxisAlignItems = 'CENTER';
     row.resize(40, 40);
     row.cornerRadius = 8;
-    row.fills = isActive ? [paintForVar(required['brand/primary-subtle'] || required['brand/primary-muted'])] : [];
+    row.fills = active
+      ? [paintForVar(required['brand/primary-subtle'] || required['brand/primary-muted'] || required['surface/base'])]
+      : [];
     if (icon) {
       const ic = icon.createInstance();
       resizeIconInstance(ic, 20);
-      bindIconColorForm(ic, isActive ? required['brand/primary'] : required['icon/default']);
+      bindIconColorForm(ic, active ? required['brand/primary'] : required['icon/default']);
       row.appendChild(ic);
     }
     return row;
   }
 
+  async function makeSectionHeading(text) {
+    const t = figma.createText();
+    const ts = styleByName['Caption/Default'] || styleByName['Label/Default'];
+    if (ts) await t.setTextStyleIdAsync(ts.id);
+    t.characters = text.toUpperCase();
+    t.fills = [paintForVar(required['text/secondary'])];
+    t.letterSpacing = { unit: 'PERCENT', value: 8 };
+    t.textAutoResize = 'HEIGHT';
+    t.name = 'Section Heading';
+    return t;
+  }
+
+  function makeDivider(width) {
+    const d = figma.createFrame();
+    d.name = 'Divider';
+    d.fills = [paintForVar(required['border/default'])];
+    d.resize(width, 1);
+    return d;
+  }
+
+  // Section data (matches reference)
+  const SECTIONS = [
+    { heading: 'Workspace', items: [
+      { icon: homeIc,    label: 'Dashboard', active: false },
+      { icon: chartIc,   label: 'Analytics', active: true  },
+      { icon: folderIc,  label: 'Projects',  active: false },
+      { icon: fileIc,    label: 'Documents', active: false },
+      { icon: usersIc,   label: 'Team',      active: false },
+    ]},
+    { heading: 'Account', items: [
+      { icon: bellIc,     label: 'Notifications', active: false },
+      { icon: settingsIc, label: 'Settings',      active: false },
+      { icon: helpIc,     label: 'Help',          active: false },
+    ]},
+  ];
+
   async function makeVariant(width) {
+    const isCollapsed = width === 'Collapsed';
     const wrap = figma.createComponent();
     wrap.name = `Width=${width}`;
     wrap.layoutMode = 'VERTICAL';
     wrap.primaryAxisSizingMode = 'FIXED';
     wrap.counterAxisSizingMode = 'FIXED';
-    wrap.counterAxisAlignItems = width === 'Collapsed' ? 'CENTER' : 'MIN';
-    wrap.itemSpacing = 4;
-    wrap.paddingLeft = wrap.paddingRight = width === 'Collapsed' ? 12 : 12;
+    wrap.counterAxisAlignItems = isCollapsed ? 'CENTER' : 'MIN';
+    wrap.itemSpacing = isCollapsed ? 8 : 4;
+    wrap.paddingLeft = wrap.paddingRight = 12;
     wrap.paddingTop = wrap.paddingBottom = 16;
     wrap.fills = [paintForVar(required['surface/card'])];
     wrap.strokes = [paintForVar(required['border/default'])];
     wrap.strokeWeight = 1;
     wrap.strokeAlign = 'INSIDE';
-    wrap.resize(width === 'Collapsed' ? 64 : 240, 480);
+    wrap.resize(isCollapsed ? 64 : 240, 100);
+    wrap.primaryAxisSizingMode = 'AUTO';
 
-    // Logo / brand area
+    // Brand area
     const brand = figma.createFrame();
+    brand.name = 'Brand';
     brand.layoutMode = 'HORIZONTAL';
     brand.primaryAxisSizingMode = 'AUTO';
     brand.counterAxisSizingMode = 'AUTO';
     brand.counterAxisAlignItems = 'CENTER';
     brand.itemSpacing = 8;
-    brand.paddingLeft = brand.paddingRight = 8;
+    brand.paddingLeft = brand.paddingRight = isCollapsed ? 0 : 8;
     brand.paddingTop = brand.paddingBottom = 8;
     brand.fills = [];
     const dot = figma.createFrame();
     dot.resize(24, 24); dot.cornerRadius = 6;
     dot.fills = [paintForVar(required['brand/primary'])];
     brand.appendChild(dot);
-    if (width === 'Expanded') {
+    if (!isCollapsed) {
       const t = figma.createText();
-      const ts = styleByName['Heading/H6'] || styleByName['Label/Default'];
+      const ts = styleByName['Heading/H6'] || styleByName['Heading/H4'] || styleByName['Label/Default'];
       if (ts) await t.setTextStyleIdAsync(ts.id);
       t.characters = 'OM Design';
       t.fills = [paintForVar(required['text/primary'])];
@@ -11607,24 +11672,33 @@ async function buildSidebar() {
     spacer.resize(1, 8); spacer.fills = [];
     wrap.appendChild(spacer);
 
-    const ITEMS = [
-      { icon: homeIc,     label: 'Dashboard', active: false },
-      { icon: chartIc,    label: 'Analytics', active: true  },
-      { icon: usersIc,    label: 'Team',      active: false },
-      { icon: settingsIc, label: 'Settings',  active: false },
-    ];
-
-    for (const item of ITEMS) {
-      if (width === 'Collapsed') {
-        wrap.appendChild(await makeIconRow(item.icon, item.active));
+    for (let si = 0; si < SECTIONS.length; si++) {
+      const sec = SECTIONS[si];
+      if (isCollapsed) {
+        if (si > 0) {
+          const sep = makeDivider(40);
+          wrap.appendChild(sep);
+        }
+        for (const item of sec.items) {
+          wrap.appendChild(await makeIconRow(item.icon, item.active));
+        }
       } else {
-        const variant = findMenuItem(item.active ? 'Active' : 'Default');
-        if (variant) {
-          const inst = variant.createInstance();
-          inst.name = item.label;
-          wrap.appendChild(inst);
-          try { inst.layoutSizingHorizontal = 'FILL'; } catch (e) {}
-          await setMiLabel(inst, item.label);
+        const head = await makeSectionHeading(sec.heading);
+        const headWrap = figma.createFrame();
+        headWrap.layoutMode = 'HORIZONTAL';
+        headWrap.primaryAxisSizingMode = 'AUTO';
+        headWrap.counterAxisSizingMode = 'AUTO';
+        headWrap.paddingLeft = 12; headWrap.paddingRight = 12;
+        headWrap.paddingTop = 12; headWrap.paddingBottom = 4;
+        headWrap.fills = [];
+        headWrap.appendChild(head);
+        wrap.appendChild(headWrap);
+        try { headWrap.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+        for (const item of sec.items) {
+          const r = await makeListItem(item.icon, item.label, item.active);
+          wrap.appendChild(r);
+          try { r.layoutSizingHorizontal = 'FILL'; } catch (e) {}
         }
       }
     }
@@ -11641,16 +11715,18 @@ async function buildSidebar() {
 
   const PAD_LEFT = 240, PAD_TOP = 200, PAD_RIGHT = 80, PAD_BOT = 80;
   let cx = PAD_LEFT;
+  let maxH = 0;
   for (const v of allVariants) {
     v.x = cx; v.y = PAD_TOP;
     cx += v.width + 80;
+    if (v.height > maxH) maxH = v.height;
   }
-  compSet.resize(cx + PAD_RIGHT, PAD_TOP + 480 + PAD_BOT);
+  compSet.resize(cx + PAD_RIGHT, PAD_TOP + maxH + PAD_BOT);
   autoPositionBelow(moleculesPage, compSet, 120);
 
   const colGroups = [{ name: 'Width', x: PAD_LEFT, width: cx - PAD_LEFT,
     sizes: [{ name: 'Expanded + Collapsed', x: PAD_LEFT, width: cx - PAD_LEFT }] }];
-  const rowGroups = [{ name: 'Sidebar', y: PAD_TOP, states: [{ name: '', y: PAD_TOP, height: 480 }] }];
+  const rowGroups = [{ name: 'Sidebar', y: PAD_TOP, states: [{ name: '', y: PAD_TOP, height: maxH }] }];
   await decorateComponentSet({
     page: moleculesPage, compSet, colGroups, rowGroups,
     padTop: PAD_TOP, padLeft: PAD_LEFT,

@@ -11231,6 +11231,17 @@ async function buildModal() {
   compSet.resize(PAD_LEFT + maxW + PAD_RIGHT, cy + PAD_BOT);
   autoPositionBelow(moleculesPage, compSet, 120);
 
+  const colGroups = [{ name: 'Modal', x: PAD_LEFT, width: maxW,
+    sizes: [{ name: 'All variants', x: PAD_LEFT, width: maxW }] }];
+  const rowGroups = [{ name: 'Variants', y: PAD_TOP, states: [{ name: '', y: PAD_TOP, height: cy - PAD_TOP }] }];
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Modal', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
   figma.notify(`✅ Modal built: ${allVariants.length} variants (Simple / Form / Confirm).`);
 }
 
@@ -11391,6 +11402,17 @@ async function buildStepper() {
   compSet.resize(PAD_LEFT + maxW + PAD_RIGHT, cy + PAD_BOT);
   autoPositionBelow(moleculesPage, compSet, 120);
 
+  const colGroups = [{ name: 'Stepper', x: PAD_LEFT, width: maxW,
+    sizes: [{ name: 'All variants', x: PAD_LEFT, width: maxW }] }];
+  const rowGroups = [{ name: 'Variants', y: PAD_TOP, states: [{ name: '', y: PAD_TOP, height: cy - PAD_TOP }] }];
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Stepper', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
   figma.notify(`✅ Stepper built: ${allVariants.length} variants.`);
 }
 
@@ -11546,6 +11568,17 @@ async function buildSidebar() {
   compSet.resize(cx + PAD_RIGHT, PAD_TOP + 480 + PAD_BOT);
   autoPositionBelow(moleculesPage, compSet, 120);
 
+  const colGroups = [{ name: 'Width', x: PAD_LEFT, width: cx - PAD_LEFT,
+    sizes: [{ name: 'Expanded + Collapsed', x: PAD_LEFT, width: cx - PAD_LEFT }] }];
+  const rowGroups = [{ name: 'Sidebar', y: PAD_TOP, states: [{ name: '', y: PAD_TOP, height: 480 }] }];
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Sidebar', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
+
   figma.notify(`✅ Sidebar built: ${allVariants.length} variants (Expanded + Collapsed).`);
 }
 
@@ -11681,6 +11714,23 @@ async function buildEmptyState() {
   }
   compSet.resize(PAD_LEFT + COL_W * 2 + PAD_RIGHT, PAD_TOP + 3 * 360 + PAD_BOT);
   autoPositionBelow(moleculesPage, compSet, 120);
+
+  const colGroups = [{ name: 'Has Action', x: PAD_LEFT, width: COL_W * 2,
+    sizes: [
+      { name: 'false', x: PAD_LEFT,           width: COL_W },
+      { name: 'true',  x: PAD_LEFT + COL_W,   width: COL_W },
+    ] }];
+  const rowGroups = ['Compact', 'Default', 'Spacious'].map((sz, i) => ({
+    name: sz, y: PAD_TOP + i * 360,
+    states: [{ name: '', y: PAD_TOP + i * 360, height: 360 }],
+  }));
+  await decorateComponentSet({
+    page: moleculesPage, compSet, colGroups, rowGroups,
+    padTop: PAD_TOP, padLeft: PAD_LEFT,
+    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
+    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
+    componentName: 'Empty State', surfaceVar: required['surface/card'], borderVar: required['border/default'],
+  });
 
   figma.notify(`✅ Empty State built: ${allVariants.length} variants.`);
 }

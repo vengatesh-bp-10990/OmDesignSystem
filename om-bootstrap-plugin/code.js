@@ -7736,10 +7736,11 @@ async function buildBreadcrumb() {
 
   const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
   const iconDefault = required['icon/default'];
-  let chevronIc = await findIconComp(iconsPage, ['chevron-right', 'caret-right']);
-  if (!chevronIc) chevronIc = await findOrCreateIconComponent('chevron-right', iconsPage, iconDefault);
-  let homeIc = await findIconComp(iconsPage, ['home', 'house']);
-  if (!homeIc) homeIc = await findOrCreateIconComponent('home', iconsPage, iconDefault);
+  // Only use icons that ALREADY exist in the Icons page — do NOT create _glyph fallbacks here.
+  const chevronIc = await findIconComp(iconsPage, ['chevron-right', 'caret-right', 'arrow-right', 'chevron right']);
+  const homeIc    = await findIconComp(iconsPage, ['home', 'house', 'home-outlined', 'house-outlined']);
+  if (!chevronIc) figma.notify('⚠️ Breadcrumb: no chevron/arrow-right icon found in Icons page — separators will be hidden.');
+  if (!homeIc)    figma.notify('⚠️ Breadcrumb: no home/house icon found in Icons page — leading icon will be hidden.');
 
   const SIZES = { Small: { font: 'Body/Small', icon: 14, gap: 6 }, Default: { font: 'Body/Default', icon: 16, gap: 8 } };
   const SAMPLE_LABELS = ['Home', 'Workspace', 'Projects', 'Design System', 'Components', 'Search Bar'];
@@ -7779,7 +7780,7 @@ async function buildBreadcrumb() {
       const isFirst   = (i === 0);
 
       // Leading Home icon swaps the first text crumb when Style=With Home Icon
-      if (isFirst && style === 'With Home Icon') {
+      if (isFirst && style === 'With Home Icon' && homeIc) {
         const ic = homeIc.createInstance();
         ic.name = 'Home';
         resizeIconInstance(ic, spec.icon);
@@ -7792,7 +7793,7 @@ async function buildBreadcrumb() {
       }
 
       // Separator after every crumb except the last
-      if (i < labels.length - 1) {
+      if (i < labels.length - 1 && chevronIc) {
         const sep = chevronIc.createInstance();
         sep.name = 'Separator';
         resizeIconInstance(sep, spec.icon);

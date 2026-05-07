@@ -12914,9 +12914,10 @@ async function buildPageHeader() {
     if (!breadcrumbSet) return null;
     return breadcrumbSet.children.find(c => /Size=Default/.test(c.name) && /State=Default/.test(c.name)) || breadcrumbSet.children[0];
   }
-  function findSearchBar() {
+  function findSearchBar(size) {
     if (!searchBarSet) return null;
-    return searchBarSet.children.find(c => /Size=Default/.test(c.name) && /State=Default/.test(c.name) && /Content=Empty/.test(c.name))
+    const want = size ? new RegExp(`Size=${size}`) : /Size=Default/;
+    return searchBarSet.children.find(c => want.test(c.name) && /State=Default/.test(c.name) && /Content=Empty/.test(c.name))
         || searchBarSet.children[0];
   }
   function findTabs() {
@@ -13025,7 +13026,7 @@ async function buildPageHeader() {
     titleRow.appendChild(actions);
 
     if (showSearch) {
-      const sb = findSearchBar();
+      const sb = findSearchBar(btnSize);
       if (sb) {
         const sbI = sb.createInstance();
         actions.appendChild(sbI);
@@ -13225,9 +13226,10 @@ async function buildTopNavBar() {
         || avatarSet.children.find(c => new RegExp(`Size=${size}`).test(c.name))
         || avatarSet.children[0];
   }
-  function findSearchBar() {
+  function findSearchBar(size) {
     if (!searchBarSet) return null;
-    return searchBarSet.children.find(c => /Size=Default/.test(c.name) && /State=Default/.test(c.name) && /Content=Empty/.test(c.name))
+    const want = size ? new RegExp(`Size=${size}`) : /Size=Default/;
+    return searchBarSet.children.find(c => want.test(c.name) && /State=Default/.test(c.name) && /Content=Empty/.test(c.name))
         || searchBarSet.children[0];
   }
   function findDropdown() {
@@ -13337,7 +13339,7 @@ async function buildTopNavBar() {
       center.primaryAxisAlignItems = 'CENTER';
       center.fills = [];
       comp.appendChild(center);
-      const sb = findSearchBar();
+      const sb = findSearchBar(isCompact ? 'Small' : 'Default');
       if (sb) {
         const sbI = sb.createInstance();
         center.appendChild(sbI);
@@ -13910,9 +13912,10 @@ async function buildDataTable() {
     return buttonSet.children.find(c => c.name === `Type=Default, Color=${color}, Size=${size}, State=Default`)
         || buttonSet.children[0];
   }
-  function findSearchBar() {
+  function findSearchBar(size) {
     if (!searchBarSet) return null;
-    return searchBarSet.children.find(c => /Size=Small/.test(c.name) && /State=Default/.test(c.name) && /Content=Empty/.test(c.name))
+    const want = size ? new RegExp(`Size=${size}`) : /Size=/;
+    return searchBarSet.children.find(c => want.test(c.name) && /State=Default/.test(c.name) && /Content=Empty/.test(c.name))
         || searchBarSet.children[0];
   }
   function findPagination() {
@@ -14015,7 +14018,7 @@ async function buildDataTable() {
     tbRight.itemSpacing = 8;
     tbRight.fills = [];
     toolbar.appendChild(tbRight);
-    const sb = findSearchBar();
+    const sb = findSearchBar(isCompact ? 'Small' : 'Default');
     if (sb) {
       const sbI = sb.createInstance();
       tbRight.appendChild(sbI);

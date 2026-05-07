@@ -7575,7 +7575,7 @@ async function buildSearchBar() {
     comp.primaryAxisSizingMode = 'FIXED';
     comp.counterAxisSizingMode = 'FIXED';
     comp.counterAxisAlignItems = 'CENTER';
-    comp.itemSpacing = spec.gap;
+    comp.itemSpacing = 2;
     comp.paddingLeft = comp.paddingRight = spec.padX;
     comp.paddingTop = comp.paddingBottom = 0;
     comp.cornerRadius = spec.radius;
@@ -7648,9 +7648,9 @@ async function buildSearchBar() {
 
   // Booleans
   const propIds = {};
-  try { propIds.clear  = compSet.addComponentProperty('Has Clear',  'BOOLEAN', true);  } catch (e) {}
+  // Clear ✕ is intentionally NOT exposed as a boolean — it appears
+  // automatically only in the Filled state (after user has typed).
   try { propIds.filter = compSet.addComponentProperty('Has Filter', 'BOOLEAN', false); } catch (e) {}
-  if (propIds.clear)  for (const n of clears)  try { n.componentPropertyReferences = { visible: propIds.clear  }; } catch (e) {}
   if (propIds.filter) for (const n of filters) try { n.componentPropertyReferences = { visible: propIds.filter }; } catch (e) {}
 
   // Showcase grid: cols = States (5), rows = Sizes (4)

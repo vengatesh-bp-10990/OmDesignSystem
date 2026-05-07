@@ -47,6 +47,7 @@
     { "name": "Build Stepper (Molecule)", "command": "buildStepper" },
     { "name": "Build Sidebar (Molecule)", "command": "buildSidebar" },
     { "name": "Build Empty State (Molecule)", "command": "buildEmptyState" },
+    { "name": "Build Component Tokens (All — backfill aliases)", "command": "buildComponentTokens" },
     { "name": "Cleanup _glyph Fallback Icons", "command": "cleanupFallbackIcons" },
     { "name": "Reset Text Styles", "command": "resetTextStyles" },
     { "name": "Reset (Delete OM Collections)", "command": "reset" }

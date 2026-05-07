@@ -12388,6 +12388,366 @@ async function rebuildAll() {
   figma.notify(`✅ Rebuilt ${toRebuild.length} components: ${toRebuild.map(r => r.setName).join(', ')}`);
 }
 
+// =============================================================================
+// COMPONENT TOKEN BACKFILL
+//   Creates Component/{Name} variable collections with single 'Default' mode,
+//   each variable aliased to its semantic source (_Appearance / _Theme).
+//   Non-destructive: existing components keep working. Adds full per-component
+//   token visibility in the Variables panel.
+// =============================================================================
+
+// Token spec: per-component map of { 'token/name': 'semanticTokenName' }
+// Resolved against resolveFormTokens() keys.
+const COMPONENT_TOKEN_SPECS = {
+  // ---- ATOMS ---------------------------------------------------------------
+  'Label': {
+    'text/default':   'text/primary',
+    'text/secondary': 'text/secondary',
+    'text/required':  'status/danger',
+  },
+  'Chip': {
+    'bg/default':     'state/disabled-bg',
+    'bg/hover':       'border/default',
+    'border/default': 'border/default',
+    'text/default':   'text/primary',
+    'text/disabled':  'state/disabled-text',
+    'icon/default':   'icon/default',
+  },
+  'TextField': {
+    'bg/default':       'surface/card',
+    'bg/disabled':      'state/disabled-bg',
+    'border/default':   'border/strong',
+    'border/hover':     'text/secondary',
+    'border/focus':     'brand/primary',
+    'border/error':     'status/danger',
+    'border/disabled':  'state/disabled-border',
+    'text/value':       'text/primary',
+    'text/placeholder': 'text/secondary',
+    'text/disabled':    'state/disabled-text',
+    'text/helper':      'text/secondary',
+    'text/error':       'status/danger-text',
+    'icon/default':     'icon/default',
+    'icon/disabled':    'icon/disabled',
+  },
+  'Textarea': {
+    'bg/default':       'surface/card',
+    'bg/disabled':      'state/disabled-bg',
+    'border/default':   'border/strong',
+    'border/hover':     'text/secondary',
+    'border/focus':     'brand/primary',
+    'border/error':     'status/danger',
+    'border/disabled':  'state/disabled-border',
+    'text/value':       'text/primary',
+    'text/placeholder': 'text/secondary',
+    'text/disabled':    'state/disabled-text',
+    'text/helper':      'text/secondary',
+    'text/error':       'status/danger-text',
+  },
+  'Dropdown': {
+    'bg/default':       'surface/card',
+    'bg/disabled':      'state/disabled-bg',
+    'border/default':   'border/strong',
+    'border/hover':     'text/secondary',
+    'border/focus':     'brand/primary',
+    'border/error':     'status/danger',
+    'border/disabled':  'state/disabled-border',
+    'text/value':       'text/primary',
+    'text/placeholder': 'text/secondary',
+    'text/disabled':    'state/disabled-text',
+    'icon/chevron':     'icon/default',
+    'icon/disabled':    'icon/disabled',
+    'chip/bg':          'state/disabled-bg',
+    'chip/text':        'text/primary',
+  },
+  'Divider': {
+    'line/default': 'border/default',
+    'line/strong':  'border/strong',
+    'text/label':   'text/secondary',
+  },
+  'Spinner': {
+    'track':         'border/default',
+    'arc/primary':   'brand/primary',
+    'arc/secondary': 'text/secondary',
+    'arc/danger':    'status/danger',
+    'arc/success':   'status/success',
+    'arc/warning':   'status/warning',
+    'arc/info':      'status/info',
+    'text/label':    'text/secondary',
+  },
+  'IconButton': {
+    'bg/default':  'surface/card',
+    'bg/hover':    'state/disabled-bg',
+    'bg/active':   'border/default',
+    'icon/default':'icon/default',
+    'icon/disabled':'icon/disabled',
+    'border/default':'border/default',
+  },
+  'SplitButton': {
+    'divider': 'border/default',
+  },
+  // ---- MOLECULES -----------------------------------------------------------
+  'MenuItem': {
+    'bg/default':    'surface/card',
+    'bg/hover':      'state/disabled-bg',
+    'bg/selected':   'brand/primary-subtle',
+    'bg/disabled':   'state/disabled-bg',
+    'text/default':  'text/primary',
+    'text/secondary':'text/secondary',
+    'text/disabled': 'state/disabled-text',
+    'text/selected': 'brand/primary',
+    'icon/default':  'icon/default',
+    'icon/selected': 'brand/primary',
+    'icon/disabled': 'icon/disabled',
+    'shortcut/text': 'text/secondary',
+  },
+  'DropdownMenu': {
+    'surface':       'surface/card',
+    'border':        'border/default',
+    'section/text':  'text/secondary',
+    'separator':     'border/default',
+  },
+  'SearchBar': {
+    'bg/default':       'surface/card',
+    'bg/focused':       'surface/card',
+    'border/default':   'border/strong',
+    'border/focus':     'brand/primary',
+    'text/value':       'text/primary',
+    'text/placeholder': 'text/secondary',
+    'icon/search':      'icon/default',
+    'icon/clear':       'icon/default',
+  },
+  'Breadcrumb': {
+    'text/link':      'text/secondary',
+    'text/hover':     'brand/primary',
+    'text/current':   'text/primary',
+    'icon/separator': 'icon/subtle',
+  },
+  'Tabs': {
+    'container/bg/line':    'surface/card',
+    'container/bg/square':  'state/disabled-bg',
+    'container/bg/rounded': 'state/disabled-bg',
+    'tab/text/default':     'text/secondary',
+    'tab/text/hover':       'text/primary',
+    'tab/text/active':      'brand/primary',
+    'tab/text/disabled':    'state/disabled-text',
+    'tab/bg/active/square': 'brand/primary-subtle',
+    'tab/bg/active/rounded':'surface/card',
+    'tab/indicator':        'brand/primary',
+    'tab/baseline':         'border/default',
+  },
+  'Pagination': {
+    'btn/bg/default':  'surface/card',
+    'btn/bg/hover':    'state/disabled-bg',
+    'btn/bg/active':   'brand/primary',
+    'btn/bg/disabled': 'state/disabled-bg',
+    'btn/text/default':'text/primary',
+    'btn/text/active': 'brand/on-primary',
+    'btn/text/disabled':'state/disabled-text',
+    'btn/border':      'border/default',
+  },
+  'Card': {
+    'surface':       'surface/card',
+    'border':        'border/default',
+    'text/title':    'text/primary',
+    'text/body':     'text/secondary',
+    'text/caption':  'text/secondary',
+  },
+  'Alert': {
+    'info/bg':         'status/info-subtle',
+    'info/border':     'status/info-border',
+    'info/text':       'text/primary',
+    'info/icon':       'status/info',
+    'success/bg':      'status/success-subtle',
+    'success/border':  'status/success-border',
+    'success/text':    'text/primary',
+    'success/icon':    'status/success',
+    'warning/bg':      'status/warning-subtle',
+    'warning/border':  'status/warning-border',
+    'warning/text':    'text/primary',
+    'warning/icon':    'status/warning',
+    'danger/bg':       'status/danger-subtle',
+    'danger/border':   'status/danger-border',
+    'danger/text':     'text/primary',
+    'danger/icon':     'status/danger',
+  },
+  'Toast': {
+    'surface':        'surface/card',
+    'border':         'border/default',
+    'info/icon':      'status/info',
+    'success/icon':   'status/success',
+    'warning/icon':   'status/warning',
+    'danger/icon':    'status/danger',
+    'text/title':     'text/primary',
+    'text/body':      'text/secondary',
+  },
+  'Progress': {
+    'track':           'state/disabled-bg',
+    'fill/primary':    'brand/primary',
+    'fill/success':    'status/success',
+    'fill/warning':    'status/warning',
+    'fill/danger':     'status/danger',
+    'text/label':      'text/secondary',
+  },
+  'Skeleton': {
+    'bg':       'state/disabled-bg',
+    'shimmer':  'border/default',
+  },
+  'Accordion': {
+    'header/bg/default':  'surface/card',
+    'header/bg/hover':    'state/disabled-bg',
+    'header/border':      'border/default',
+    'header/text':        'text/primary',
+    'body/bg':            'surface/card',
+    'body/text':          'text/secondary',
+    'icon/chevron':       'icon/default',
+  },
+  'Calendar': {
+    'surface':              'surface/card',
+    'border':               'border/default',
+    'header/text':          'text/primary',
+    'header/icon':          'icon/default',
+    'weekday/text':         'text/secondary',
+    'day/text/default':     'text/primary',
+    'day/text/muted':       'text/secondary',
+    'day/text/disabled':    'state/disabled-text',
+    'day/text/selected':    'brand/on-primary',
+    'day/bg/hover':         'state/disabled-bg',
+    'day/bg/selected':      'brand/primary',
+    'day/bg/in-range':      'brand/primary-subtle',
+    'day/today/ring':       'brand/primary',
+  },
+  'DatePicker': {
+    'trigger/bg':       'surface/card',
+    'trigger/border':   'border/strong',
+    'trigger/text':     'text/primary',
+    'trigger/placeholder': 'text/secondary',
+    'trigger/icon':     'icon/default',
+    'popover/surface':  'surface/card',
+    'popover/border':   'border/default',
+  },
+  'RangePicker': {
+    'trigger/bg':       'surface/card',
+    'trigger/border':   'border/strong',
+    'trigger/text':     'text/primary',
+    'trigger/placeholder': 'text/secondary',
+    'trigger/separator':'icon/subtle',
+    'popover/surface':  'surface/card',
+    'popover/border':   'border/default',
+    'range/bg':         'brand/primary-subtle',
+  },
+  'TimePicker': {
+    'trigger/bg':       'surface/card',
+    'trigger/border':   'border/strong',
+    'trigger/text':     'text/primary',
+    'trigger/icon':     'icon/default',
+    'popover/surface':  'surface/card',
+    'popover/border':   'border/default',
+    'cell/text':        'text/primary',
+    'cell/text/selected':'brand/on-primary',
+    'cell/bg/selected': 'brand/primary',
+    'cell/bg/hover':    'state/disabled-bg',
+  },
+  'DateTimePicker': {
+    'trigger/bg':       'surface/card',
+    'trigger/border':   'border/strong',
+    'trigger/text':     'text/primary',
+    'trigger/icon':     'icon/default',
+    'popover/surface':  'surface/card',
+    'popover/border':   'border/default',
+  },
+  'Modal': {
+    'surface':         'surface/card',
+    'border':          'border/default',
+    'scrim':           'text/primary',
+    'text/title':      'text/primary',
+    'text/body':       'text/secondary',
+    'footer/bg':       'surface/base',
+    'footer/border':   'border/default',
+    'status/info':     'status/info',
+    'status/success':  'status/success',
+    'status/warning':  'status/warning',
+    'status/danger':   'status/danger',
+  },
+  'Stepper': {
+    'circle/bg/completed': 'brand/primary',
+    'circle/bg/active':    'surface/card',
+    'circle/bg/inactive':  'surface/card',
+    'circle/border/active':'brand/primary',
+    'circle/border/inactive':'border/strong',
+    'circle/text/active':  'brand/primary',
+    'circle/text/inactive':'text/secondary',
+    'circle/icon/completed':'brand/on-primary',
+    'connector/active':    'brand/primary',
+    'connector/inactive':  'border/default',
+    'label/active':        'text/primary',
+    'label/completed':     'text/primary',
+    'label/inactive':      'text/secondary',
+  },
+  'Sidebar': {
+    'surface':            'surface/card',
+    'border':             'border/default',
+    'brand/text':         'text/primary',
+    'section/heading':    'text/secondary',
+    'item/bg/default':    'surface/card',
+    'item/bg/hover':      'state/disabled-bg',
+    'item/bg/active':     'brand/primary-subtle',
+    'item/text/default':  'text/primary',
+    'item/text/active':   'brand/primary',
+    'item/icon/default':  'icon/default',
+    'item/icon/active':   'brand/primary',
+    'counter/bg':         'state/disabled-bg',
+    'counter/text':       'text/secondary',
+    'counter/bg/active':  'brand/primary',
+    'counter/text/active':'brand/on-primary',
+    'divider':            'border/default',
+  },
+  'EmptyState': {
+    'icon/bg':       'state/disabled-bg',
+    'icon/color':    'icon/subtle',
+    'text/title':    'text/primary',
+    'text/body':     'text/secondary',
+  },
+};
+
+async function buildComponentTokens() {
+  console.log('[OM DS] buildComponentTokens started');
+  const required = await resolveFormTokens();
+  let createdCollections = 0;
+  let createdVars = 0;
+  let aliasedVars = 0;
+  const missing = [];
+
+  for (const [compName, spec] of Object.entries(COMPONENT_TOKEN_SPECS)) {
+    const colName = `Component/${compName}`;
+    const col = await getOrCreateCollection(colName, ['Default']);
+    const beforeAll = await figma.variables.getLocalVariablesAsync();
+    const beforeIds = new Set(beforeAll.filter(v => v.variableCollectionId === col.id).map(v => v.id));
+
+    for (const [tokenName, semanticName] of Object.entries(spec)) {
+      const sourceVar = required[semanticName];
+      if (!sourceVar) {
+        missing.push(`${compName}/${tokenName} → ${semanticName}`);
+        continue;
+      }
+      const v = await getOrCreateVariable(tokenName, col, 'COLOR');
+      try {
+        v.setValueForMode(col.modes[0].modeId, figma.variables.createVariableAlias(sourceVar));
+        aliasedVars++;
+      } catch (e) {
+        console.warn(`[OM DS] alias failed: ${colName}/${tokenName}`, e.message);
+      }
+      if (!beforeIds.has(v.id)) createdVars++;
+    }
+    createdCollections++;
+  }
+
+  console.log(`[OM DS] buildComponentTokens: ${createdCollections} collections, ${createdVars} new vars, ${aliasedVars} aliased.`);
+  if (missing.length > 0) {
+    console.warn('[OM DS] Missing semantic sources for:', missing.join(', '));
+  }
+  figma.notify(`✅ Component tokens: ${createdCollections} collections, ${aliasedVars} variables aliased${missing.length ? ` (${missing.length} missing — see console)` : ''}.`);
+}
+
 (async () => {
   try {
     console.log('[OM DS] Plugin start. command =', figma.command);
@@ -12395,6 +12755,8 @@ async function rebuildAll() {
       await reset();
     } else if (figma.command === 'resetTextStyles') {
       await resetTextStyles();
+    } else if (figma.command === 'buildComponentTokens') {
+      await buildComponentTokens();
     } else if (figma.command === 'buildIcons') {
       await buildIconComponents();
     } else if (figma.command === 'buildButton') {

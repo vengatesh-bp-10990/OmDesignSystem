@@ -9529,6 +9529,12 @@ async function buildTabs2() {
       row.cornerRadius = 999;
       row.paddingLeft = row.paddingRight = 4;
       row.paddingTop = row.paddingBottom = 4;
+    } else if (variant === 'Square') {
+      // Soft neutral container so the active peach pill sits on a tinted bar
+      row.fills = [paintForVar(required['state/disabled-bg'])];
+      row.cornerRadius = 8;
+      row.paddingLeft = row.paddingRight = 4;
+      row.paddingTop = row.paddingBottom = 4;
     } else {
       row.fills = [];
     }
@@ -9548,6 +9554,12 @@ async function buildTabs2() {
       try {
         inst.layoutSizingHorizontal = fullWidth ? 'FILL' : 'HUG';
         inst.layoutSizingVertical   = 'HUG';
+      } catch (e) {}
+      // Hide the leading icon inside the Tab Item — for a clean tabs bar we
+      // only want the label. (Icon adds ~20px of empty space before the text.)
+      try {
+        const lead = inst.findOne(n => n.name === 'Leading Icon');
+        if (lead) lead.visible = false;
       } catch (e) {}
       await setTabLabel(inst, LABELS[i]);
     }

@@ -6490,8 +6490,9 @@ async function buildSpinner() {
     return required['state/disabled-bg'];
   }
 
-  // Build a spinner ring as: ellipse (track full circle) + arc 270° (active part)
-  // Using two ellipses stacked: full circle = track, then a 3/4 arc layered on top.
+  // Build a spinner ring as: ellipse (track full circle) + open arc 270° vector (active part).
+  // Vector path is an SVG arc with NO fill — avoids the pie/pacman radial edges that
+  // ellipse arcData creates.
   function makeRing(d, weight, activeVar, trackVar) {
     const wrap = figma.createFrame();
     wrap.name = 'Ring';
@@ -6507,19 +6508,29 @@ async function buildSpinner() {
     track.fills = [];
     track.strokes = [paintForVar(trackVar)];
     track.strokeWeight = weight;
-    track.strokeAlign = 'INSIDE';
+    track.strokeAlign = 'CENTER';
     wrap.appendChild(track);
 
-    // Active arc — use ellipse arcData to draw 270°
-    const arc = figma.createEllipse();
+    // Active arc — 270° open arc as vector path (start at top, sweep clockwise to left).
+    // Inset by half stroke so CENTER-aligned stroke stays inside the wrap bounds.
+    const inset = weight / 2;
+    const cx = d / 2;
+    const cy = d / 2;
+    const r = d / 2 - inset;
+    // start: top (cx, cy - r)
+    // end:   left (cx - r, cy)
+    // large-arc-flag = 1 (270° > 180°), sweep-flag = 1 (clockwise)
+    const arcPath = `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - r} ${cy}`;
+    const arc = figma.createVector();
     arc.name = 'Arc';
     arc.resize(d, d);
+    arc.x = 0; arc.y = 0;
+    arc.vectorPaths = [{ windingRule: 'NONE', data: arcPath }];
     arc.fills = [];
     arc.strokes = [paintForVar(activeVar)];
     arc.strokeWeight = weight;
-    arc.strokeAlign = 'INSIDE';
-    arc.arcData = { startingAngle: 0, endingAngle: Math.PI * 1.5, innerRadius: 0 };
-    arc.rotation = -90; // start at top
+    arc.strokeAlign = 'CENTER';
+    arc.strokeCap = 'ROUND';
     wrap.appendChild(arc);
 
     return wrap;

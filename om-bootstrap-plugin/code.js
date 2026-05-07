@@ -10906,10 +10906,16 @@ async function buildDateTimePicker() {
 
 // =============================================================================
 // MODAL / DIALOG (molecule)
-//   Size: Small (480) | Medium (560) | Large (720)
-//   Layout: Default (title + body + footer) | Confirm (icon + title + body + footer)
-//   Status (only for Confirm layout): Info | Success | Warning | Danger
-// Composes real Button instances for footer actions.
+//   Type:
+//     Simple    — heading + body + footer (Cancel / Confirm)
+//     Form      — heading + body + form fields + footer
+//     Confirm   — status icon + heading + body + footer (Cancel / Confirm or Delete)
+//   Subtype controls each Type:
+//     Simple    → Has Heading: true | false
+//     Form      → Form Field: TextField | Dropdown | DatePicker
+//     Confirm   → Status: Info | Success | Warning | Danger; Has Type-to-Confirm: false | true (Danger only, true)
+// No close icon — Cancel button is the dismiss control.
+// All composes Button + (for Form) TextField/Dropdown/Date Picker instances.
 // =============================================================================
 async function buildModal() {
   console.log('[OM DS] buildModal started');
@@ -10931,10 +10937,12 @@ async function buildModal() {
   await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
 
   const buttonSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Button');
-  if (!buttonSet) { figma.notify('⚠️ Button not found. Run "Build Button" first.'); return; }
+  if (!buttonSet) { figma.notify('⚠️ Button not found.'); return; }
+  const tfSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'TextField');
+  const ddSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Dropdown');
+  const dpSet = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Date Picker');
 
   const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
-  const closeIc = await findIconComp(iconsPage, ['x', 'close', 'x-circle']);
   const infoIc = await findIconComp(iconsPage, ['info', 'info-circle']);
   const successIc = await findIconComp(iconsPage, ['check-circle', 'check']);
   const warningIc = await findIconComp(iconsPage, ['alert-triangle', 'warning']);
@@ -10943,6 +10951,18 @@ async function buildModal() {
   function findButton(color, size, state) {
     return buttonSet.children.find(c => c.name === `Type=Default, Color=${color}, Size=${size}, State=${state}`)
         || buttonSet.children.find(c => c.name === `Type=Default, Color=${color}, Size=Default, State=Default`);
+  }
+  function findTfVariant() {
+    if (!tfSet) return null;
+    return tfSet.children.find(c => c.name === 'Size=Default, State=Default, Status=None, Content=Empty');
+  }
+  function findDdVariant() {
+    if (!ddSet) return null;
+    return ddSet.children.find(c => /Type=Single/.test(c.name) && /State=Default/.test(c.name) && /Status=None/.test(c.name) && /Content=Empty/.test(c.name)) || ddSet.children[0];
+  }
+  function findDpVariant() {
+    if (!dpSet) return null;
+    return dpSet.children.find(c => c.name === 'Size=Default, State=Default, Has Value=false') || dpSet.children[0];
   }
   async function setButtonText(inst, txt) {
     const t = inst.findOne(n => n.type === 'TEXT');
@@ -10958,11 +10978,11 @@ async function buildModal() {
     return { icon: infoIc, color: required['status/info'], primaryBtn: 'Primary' };
   }
 
-  const SIZE_W = { Small: 480, Medium: 560, Large: 720 };
-
-  async function makeVariant(size, layout, status) {
+  // Build the modal shell (header + body + footer) — used by all types.
+  // bodySpec: { hasHeading, headingText, bodyText, statusIcon, formNodes, footerLeftNote, primaryLabel, primaryColor, cancelLabel }
+  async function buildShell(name, width, opts) {
     const wrap = figma.createComponent();
-    wrap.name = `Size=${size}, Layout=${layout}, Status=${status}`;
+    wrap.name = name;
     wrap.layoutMode = 'VERTICAL';
     wrap.primaryAxisSizingMode = 'AUTO';
     wrap.counterAxisSizingMode = 'FIXED';
@@ -10971,65 +10991,49 @@ async function buildModal() {
     wrap.strokes = [paintForVar(required['border/default'])];
     wrap.strokeWeight = 1;
     wrap.strokeAlign = 'INSIDE';
-    wrap.cornerRadius = 12;
+    wrap.clipsContent = true;
     try {
       wrap.effects = [{ type: 'DROP_SHADOW', color: { r: 0.06, g: 0.07, b: 0.12, a: 0.16 }, offset: { x: 0, y: 16 }, radius: 40, spread: -8, visible: true, blendMode: 'NORMAL' }];
     } catch (e) {}
-    wrap.resize(SIZE_W[size], 200);
+    // Width is FIXED via counterAxis FIXED + initial resize. Height is AUTO.
+    wrap.resize(width, 100);
+    // Set radius AFTER resize so all four corners stick. resize() can otherwise
+    // reset top-left/right radii on certain auto-layout configurations.
+    wrap.cornerRadius = 0;
+    wrap.topLeftRadius = wrap.topRightRadius = 12;
+    wrap.bottomLeftRadius = wrap.bottomRightRadius = 12;
 
-    // Header
-    const header = figma.createFrame();
-    header.name = 'Header';
-    header.layoutMode = 'HORIZONTAL';
-    header.primaryAxisSizingMode = 'FIXED';
-    header.counterAxisSizingMode = 'AUTO';
-    header.primaryAxisAlignItems = 'SPACE_BETWEEN';
-    header.counterAxisAlignItems = 'CENTER';
-    header.itemSpacing = 12;
-    header.paddingLeft = header.paddingRight = 24;
-    header.paddingTop = 24; header.paddingBottom = 0;
-    header.fills = [];
-    wrap.appendChild(header);
-    try { header.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    // Header (omitted entirely if !hasHeading)
+    if (opts.hasHeading) {
+      const header = figma.createFrame();
+      header.name = 'Header';
+      header.layoutMode = 'HORIZONTAL';
+      header.primaryAxisSizingMode = 'FIXED';
+      header.counterAxisSizingMode = 'AUTO';
+      header.primaryAxisAlignItems = 'MIN';
+      header.counterAxisAlignItems = 'CENTER';
+      header.itemSpacing = 12;
+      header.paddingLeft = header.paddingRight = 24;
+      header.paddingTop = 24; header.paddingBottom = 0;
+      header.fills = [];
+      wrap.appendChild(header);
+      try { header.layoutSizingHorizontal = 'FILL'; } catch (e) {}
 
-    const titleRow = figma.createFrame();
-    titleRow.layoutMode = 'HORIZONTAL';
-    titleRow.primaryAxisSizingMode = 'AUTO';
-    titleRow.counterAxisSizingMode = 'AUTO';
-    titleRow.counterAxisAlignItems = 'CENTER';
-    titleRow.itemSpacing = 12;
-    titleRow.fills = [];
-    header.appendChild(titleRow);
-
-    if (layout === 'Confirm') {
-      const info = statusInfo(status);
-      if (info.icon) {
-        const ic = info.icon.createInstance();
+      if (opts.statusIcon) {
+        const ic = opts.statusIcon.icon.createInstance();
         ic.name = 'Status Icon';
         resizeIconInstance(ic, 24);
-        bindIconColorForm(ic, info.color);
-        titleRow.appendChild(ic);
+        bindIconColorForm(ic, opts.statusIcon.color);
+        header.appendChild(ic);
         try { ic.layoutSizingHorizontal = 'FIXED'; ic.layoutSizingVertical = 'FIXED'; } catch (e) {}
       }
-    }
-
-    const title = figma.createText();
-    const titleStyle = styleByName['Heading/H4'] || styleByName['Heading/H5'];
-    if (titleStyle) await title.setTextStyleIdAsync(titleStyle.id);
-    title.characters = layout === 'Confirm'
-      ? (status === 'Danger' ? 'Delete this item?' : status === 'Warning' ? 'Confirm action' : status === 'Success' ? 'Action complete' : 'Are you sure?')
-      : 'Modal title';
-    title.fills = [paintForVar(required['text/primary'])];
-    title.textAutoResize = 'WIDTH_AND_HEIGHT';
-    titleRow.appendChild(title);
-
-    if (closeIc) {
-      const close = closeIc.createInstance();
-      close.name = 'Close';
-      resizeIconInstance(close, 20);
-      bindIconColorForm(close, required['icon/subtle']);
-      header.appendChild(close);
-      try { close.layoutSizingHorizontal = 'FIXED'; close.layoutSizingVertical = 'FIXED'; } catch (e) {}
+      const title = figma.createText();
+      const tStyle = styleByName['Heading/H4'] || styleByName['Heading/H5'];
+      if (tStyle) await title.setTextStyleIdAsync(tStyle.id);
+      title.characters = opts.headingText;
+      title.fills = [paintForVar(required['text/primary'])];
+      title.textAutoResize = 'WIDTH_AND_HEIGHT';
+      header.appendChild(title);
     }
 
     // Body
@@ -11038,23 +11042,30 @@ async function buildModal() {
     body.layoutMode = 'VERTICAL';
     body.primaryAxisSizingMode = 'AUTO';
     body.counterAxisSizingMode = 'AUTO';
-    body.itemSpacing = 8;
+    body.itemSpacing = 16;
     body.paddingLeft = body.paddingRight = 24;
-    body.paddingTop = 16; body.paddingBottom = 24;
+    body.paddingTop = opts.hasHeading ? 16 : 24;
+    body.paddingBottom = 24;
     body.fills = [];
     wrap.appendChild(body);
     try { body.layoutSizingHorizontal = 'FILL'; } catch (e) {}
 
-    const bodyText = figma.createText();
-    const bStyle = styleByName['Body/Default'];
-    if (bStyle) await bodyText.setTextStyleIdAsync(bStyle.id);
-    bodyText.characters = layout === 'Confirm'
-      ? 'This action cannot be undone. Please confirm to proceed.'
-      : 'This is the modal body content area. Place your form fields, descriptions, or supporting content here.';
-    bodyText.fills = [paintForVar(required['text/secondary'])];
-    bodyText.textAutoResize = 'HEIGHT';
-    body.appendChild(bodyText);
-    try { bodyText.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    if (opts.bodyText) {
+      const bt = figma.createText();
+      const bStyle = styleByName['Body/Default'];
+      if (bStyle) await bt.setTextStyleIdAsync(bStyle.id);
+      bt.characters = opts.bodyText;
+      bt.fills = [paintForVar(required['text/secondary'])];
+      bt.textAutoResize = 'HEIGHT';
+      body.appendChild(bt);
+      try { bt.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    }
+    if (opts.formNodes) {
+      for (const node of opts.formNodes) {
+        body.appendChild(node);
+        try { node.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+      }
+    }
 
     // Footer
     const footer = figma.createFrame();
@@ -11071,54 +11082,156 @@ async function buildModal() {
     wrap.appendChild(footer);
     try { footer.layoutSizingHorizontal = 'FILL'; } catch (e) {}
 
-    const cancelVariant = findButton('Secondary', 'Default', 'Default');
-    const confirmColor = layout === 'Confirm' ? statusInfo(status).primaryBtn : 'Primary';
-    const confirmVariant = findButton(confirmColor, 'Default', 'Default');
-    if (cancelVariant) {
-      const c = cancelVariant.createInstance(); c.name = 'Cancel';
+    const cancelV = findButton('Secondary', 'Default', 'Default');
+    const confirmV = findButton(opts.primaryColor || 'Primary', 'Default', 'Default');
+    if (cancelV) {
+      const c = cancelV.createInstance(); c.name = 'Cancel';
       footer.appendChild(c);
-      await setButtonText(c, 'Cancel');
+      await setButtonText(c, opts.cancelLabel || 'Cancel');
     }
-    if (confirmVariant) {
-      const ok = confirmVariant.createInstance(); ok.name = 'Confirm';
+    if (confirmV) {
+      const ok = confirmV.createInstance(); ok.name = 'Confirm';
       footer.appendChild(ok);
-      await setButtonText(ok, layout === 'Confirm' && status === 'Danger' ? 'Delete' : 'Confirm');
+      await setButtonText(ok, opts.primaryLabel || 'Confirm');
     }
-
     return wrap;
   }
 
-  const SIZES = ['Small', 'Medium', 'Large'];
-  const allVariants = []; const meta = [];
-  // Default layout: 3 variants (one per size)
-  for (const sz of SIZES) {
-    const v = await makeVariant(sz, 'Default', 'Info');
-    allVariants.push(v); meta.push({ size: sz, layout: 'Default', status: 'Info' });
+  // Build a form-row subtree (Label-style helper not needed; we just instance the field)
+  function instanceField(kind) {
+    if (kind === 'TextField') {
+      const v = findTfVariant();
+      if (!v) return null;
+      const inst = v.createInstance();
+      inst.name = 'TextField';
+      return inst;
+    }
+    if (kind === 'Dropdown') {
+      const v = findDdVariant();
+      if (!v) return null;
+      const inst = v.createInstance();
+      inst.name = 'Dropdown';
+      return inst;
+    }
+    if (kind === 'DatePicker') {
+      const v = findDpVariant();
+      if (!v) return null;
+      const inst = v.createInstance();
+      inst.name = 'Date Picker';
+      return inst;
+    }
+    return null;
   }
-  // Confirm layout: 4 statuses × Medium size only (most common)
+
+  // Type-to-confirm input row (for Danger Confirm with Has Type-to-Confirm=true)
+  async function makeConfirmInput() {
+    const v = findTfVariant();
+    if (!v) return null;
+    const inst = v.createInstance();
+    inst.name = 'Type-to-confirm';
+    return inst;
+  }
+
+  const SIZE_W = { Small: 480, Medium: 560, Large: 720 };
+
+  // ---- Variant builders ----------------------------------------------------
+  const allVariants = []; const meta = [];
+
+  // 1. Simple — Has Heading × Size
+  for (const hh of [true, false]) {
+    for (const sz of ['Small', 'Medium', 'Large']) {
+      const w = await buildShell(
+        `Type=Simple, Has Heading=${hh}, Size=${sz}`,
+        SIZE_W[sz],
+        {
+          hasHeading: hh,
+          headingText: 'Modal title',
+          bodyText: 'This is the modal body content area. Place your description, form fields, or supporting content here.',
+          primaryLabel: 'Confirm', primaryColor: 'Primary', cancelLabel: 'Cancel',
+        }
+      );
+      allVariants.push(w); meta.push({ group: 'Simple', sz, hh });
+    }
+  }
+
+  // 2. Form — Form Field × Has Heading (Medium only)
+  for (const hh of [true, false]) {
+    for (const fk of ['TextField', 'Dropdown', 'DatePicker']) {
+      const formNodes = [];
+      const f1 = instanceField(fk); if (f1) formNodes.push(f1);
+      const f2 = instanceField(fk === 'TextField' ? 'Dropdown' : 'TextField'); if (f2) formNodes.push(f2);
+      const w = await buildShell(
+        `Type=Form, Has Heading=${hh}, Form Field=${fk}`,
+        SIZE_W.Medium,
+        {
+          hasHeading: hh,
+          headingText: 'New record',
+          bodyText: null,
+          formNodes,
+          primaryLabel: 'Save', primaryColor: 'Primary', cancelLabel: 'Cancel',
+        }
+      );
+      allVariants.push(w); meta.push({ group: 'Form', fk, hh });
+    }
+  }
+
+  // 3. Confirm — Status × Has Type-to-Confirm (only Danger gets the type-to-confirm)
   for (const st of ['Info', 'Success', 'Warning', 'Danger']) {
-    const v = await makeVariant('Medium', 'Confirm', st);
-    allVariants.push(v); meta.push({ size: 'Medium', layout: 'Confirm', status: st });
+    const info = statusInfo(st);
+    const w = await buildShell(
+      `Type=Confirm, Status=${st}, Has Type-to-Confirm=false`,
+      SIZE_W.Medium,
+      {
+        hasHeading: true,
+        headingText: st === 'Danger' ? 'Delete this item?' : st === 'Warning' ? 'Confirm action' : st === 'Success' ? 'Action complete' : 'Are you sure?',
+        bodyText: 'This action cannot be undone. Please confirm to proceed.',
+        statusIcon: info,
+        primaryLabel: st === 'Danger' ? 'Delete' : 'Confirm',
+        primaryColor: info.primaryBtn,
+        cancelLabel: 'Cancel',
+      }
+    );
+    allVariants.push(w); meta.push({ group: 'Confirm', st, ttc: false });
+  }
+  // Danger + Type-to-Confirm input
+  {
+    const info = statusInfo('Danger');
+    const tt = await makeConfirmInput();
+    const formNodes = tt ? [tt] : [];
+    const w = await buildShell(
+      `Type=Confirm, Status=Danger, Has Type-to-Confirm=true`,
+      SIZE_W.Medium,
+      {
+        hasHeading: true,
+        headingText: 'Delete this item?',
+        bodyText: 'This action cannot be undone. Type "DELETE" to confirm.',
+        statusIcon: info,
+        formNodes,
+        primaryLabel: 'Delete', primaryColor: 'Danger', cancelLabel: 'Cancel',
+      }
+    );
+    allVariants.push(w); meta.push({ group: 'Confirm', st: 'Danger', ttc: true });
   }
 
   const compSet = figma.combineAsVariants(allVariants, moleculesPage);
   compSet.name = 'Modal'; compSet.layoutMode = 'NONE'; compSet.fills = [];
 
+  // Layout: stack vertically; group sections with extra gap
   const PAD_LEFT = 240, PAD_TOP = 200, PAD_RIGHT = 80, PAD_BOT = 80;
-  const COL_W = 800, ROW_H = 320, GROUP_GAP = 40;
-
-  // Layout: stack all vertically grouped by layout
-  let cy = PAD_TOP;
+  const GAP = 40;
+  let cy = PAD_TOP, maxW = 0, prevGroup = null;
   for (let i = 0; i < allVariants.length; i++) {
-    const v = allVariants[i];
-    v.x = PAD_LEFT;
-    v.y = cy;
-    cy += v.height + GROUP_GAP;
+    const v = allVariants[i]; const m = meta[i];
+    if (prevGroup && prevGroup !== m.group) cy += 40;
+    v.x = PAD_LEFT; v.y = cy;
+    cy += v.height + GAP;
+    if (v.width > maxW) maxW = v.width;
+    prevGroup = m.group;
   }
-  compSet.resize(PAD_LEFT + COL_W + PAD_RIGHT, cy + PAD_BOT);
+  compSet.resize(PAD_LEFT + maxW + PAD_RIGHT, cy + PAD_BOT);
   autoPositionBelow(moleculesPage, compSet, 120);
 
-  figma.notify(`✅ Modal built: ${allVariants.length} variants (Default + Confirm × statuses).`);
+  figma.notify(`✅ Modal built: ${allVariants.length} variants (Simple / Form / Confirm).`);
 }
 
 

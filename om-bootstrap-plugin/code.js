@@ -11316,50 +11316,41 @@ async function buildStepper() {
     return c;
   }
 
-  async function makeStep(num, state, label, orientation, sizePx, fontName) {
-    const wrap = figma.createFrame();
-    wrap.layoutMode = orientation === 'Horizontal' ? 'HORIZONTAL' : 'HORIZONTAL';
-    wrap.primaryAxisSizingMode = 'AUTO';
-    wrap.counterAxisSizingMode = 'AUTO';
-    wrap.counterAxisAlignItems = 'CENTER';
-    wrap.itemSpacing = 12;
-    wrap.fills = [];
-    const circle = await makeStepCircle(state, num, sizePx, fontName);
-    wrap.appendChild(circle);
+  async function makeLabelText(label, state) {
     const t = figma.createText();
     const lStyle = styleByName['Label/Default'] || styleByName['Body/Default'];
     if (lStyle) await t.setTextStyleIdAsync(lStyle.id);
     t.characters = label;
-    const lblColor = state === 'Active' ? required['text/primary']
-                    : state === 'Completed' ? required['text/primary']
-                    : required['text/secondary'];
+    const lblColor = (state === 'Active' || state === 'Completed')
+      ? required['text/primary']
+      : required['text/secondary'];
     t.fills = [paintForVar(lblColor)];
     t.textAutoResize = 'WIDTH_AND_HEIGHT';
-    wrap.appendChild(t);
-    return wrap;
+    return t;
   }
 
-  function makeConnector(orientation, isCompleted) {
+  // Connector colored brand if BOTH flanking states are Completed (or Completed→Active)
+  function makeConnector(orientation, prevState, nextState, lengthPx) {
+    const isActive = prevState === 'Completed';
     const ln = figma.createFrame();
-    ln.fills = [paintForVar(isCompleted ? required['brand/primary'] : required['border/default'])];
-    if (orientation === 'Horizontal') {
-      ln.resize(40, 2);
-    } else {
-      ln.resize(2, 32);
-    }
+    ln.fills = [paintForVar(isActive ? required['brand/primary'] : required['border/default'])];
+    if (orientation === 'Horizontal') ln.resize(lengthPx, 2);
+    else ln.resize(2, lengthPx);
     return ln;
   }
 
   async function makeVariant(orientation, size) {
     const sizePx = size === 'Small' ? 24 : 32;
     const fontName = size === 'Small' ? 'Body/Small' : 'Body/Default';
+    const CONN_LEN = orientation === 'Horizontal' ? 64 : 24;
+    const STEP_GAP = orientation === 'Horizontal' ? 8 : 4;
+
     const wrap = figma.createComponent();
     wrap.name = `Orientation=${orientation}, Size=${size}`;
-    wrap.layoutMode = orientation === 'Horizontal' ? 'HORIZONTAL' : 'VERTICAL';
+    wrap.layoutMode = orientation === 'Horizontal' ? 'VERTICAL' : 'HORIZONTAL';
     wrap.primaryAxisSizingMode = 'AUTO';
     wrap.counterAxisSizingMode = 'AUTO';
-    wrap.counterAxisAlignItems = orientation === 'Horizontal' ? 'CENTER' : 'MIN';
-    wrap.itemSpacing = orientation === 'Horizontal' ? 8 : 4;
+    wrap.itemSpacing = 8;
     wrap.fills = [];
 
     const STEPS = [
@@ -11369,13 +11360,102 @@ async function buildStepper() {
       { num: 4, state: 'Inactive',  label: 'Confirm' },
     ];
 
-    for (let i = 0; i < STEPS.length; i++) {
-      const s = STEPS[i];
-      const step = await makeStep(s.num, s.state, s.label, orientation, sizePx, fontName);
-      wrap.appendChild(step);
-      if (i < STEPS.length - 1) {
-        wrap.appendChild(makeConnector(orientation, s.state === 'Completed'));
+    if (orientation === 'Horizontal') {
+      // Two-row grid: row1 = circles + connectors; row2 = labels centered under circles.
+      const circleRow = figma.createFrame();
+      circleRow.name = 'Circles';
+      circleRow.layoutMode = 'HORIZONTAL';
+      circleRow.primaryAxisSizingMode = 'AUTO';
+      circleRow.counterAxisSizingMode = 'AUTO';
+      circleRow.counterAxisAlignItems = 'CENTER';
+      circleRow.itemSpacing = 0;
+      circleRow.fills = [];
+      wrap.appendChild(circleRow);
+
+      const labelRow = figma.createFrame();
+      labelRow.name = 'Labels';
+      labelRow.layoutMode = 'HORIZONTAL';
+      labelRow.primaryAxisSizingMode = 'AUTO';
+      labelRow.counterAxisSizingMode = 'AUTO';
+      labelRow.counterAxisAlignItems = 'MIN';
+      labelRow.itemSpacing = 0;
+      labelRow.fills = [];
+      wrap.appendChild(labelRow);
+
+      for (let i = 0; i < STEPS.length; i++) {
+        const s = STEPS[i];
+        circleRow.appendChild(await makeStepCircle(s.state, s.num, sizePx, fontName));
+        if (i < STEPS.length - 1) {
+          circleRow.appendChild(makeConnector('Horizontal', s.state, STEPS[i + 1].state, CONN_LEN));
+        }
+
+        // Label cell — fixed width = circle + connector (so label centers under its circle).
+        // Last label cell width = circle size only.
+        const cellW = sizePx + (i < STEPS.length - 1 ? CONN_LEN : 0);
+        const cell = figma.createFrame();
+        cell.layoutMode = 'HORIZONTAL';
+        cell.primaryAxisSizingMode = 'FIXED';
+        cell.counterAxisSizingMode = 'AUTO';
+        cell.primaryAxisAlignItems = 'MIN';
+        cell.counterAxisAlignItems = 'MIN';
+        cell.fills = [];
+        cell.resize(cellW, 1);
+        cell.paddingTop = 0;
+        // Center label text under its circle: pad-left so label center ~ circle center.
+        // Approximation: subtract roughly half label width is impossible without measuring;
+        // we just left-align the label flush under the circle for predictability.
+        labelRow.appendChild(cell);
+        try { cell.layoutSizingVertical = 'HUG'; } catch (e) {}
+        const lbl = await makeLabelText(s.label, s.state);
+        cell.appendChild(lbl);
       }
+    } else {
+      // Vertical: two columns. Col1 = circles + connectors (centered); Col2 = labels aligned to circle midline.
+      const col1 = figma.createFrame();
+      col1.name = 'Circles';
+      col1.layoutMode = 'VERTICAL';
+      col1.primaryAxisSizingMode = 'AUTO';
+      col1.counterAxisSizingMode = 'FIXED';
+      col1.primaryAxisAlignItems = 'MIN';
+      col1.counterAxisAlignItems = 'CENTER';
+      col1.itemSpacing = 0;
+      col1.fills = [];
+      col1.resize(sizePx, 1);
+      wrap.appendChild(col1);
+
+      const col2 = figma.createFrame();
+      col2.name = 'Labels';
+      col2.layoutMode = 'VERTICAL';
+      col2.primaryAxisSizingMode = 'AUTO';
+      col2.counterAxisSizingMode = 'AUTO';
+      col2.itemSpacing = 0;
+      col2.fills = [];
+      wrap.appendChild(col2);
+
+      for (let i = 0; i < STEPS.length; i++) {
+        const s = STEPS[i];
+        col1.appendChild(await makeStepCircle(s.state, s.num, sizePx, fontName));
+        if (i < STEPS.length - 1) {
+          col1.appendChild(makeConnector('Vertical', s.state, STEPS[i + 1].state, CONN_LEN));
+        }
+
+        const cellH = sizePx + (i < STEPS.length - 1 ? CONN_LEN : 0);
+        const cell = figma.createFrame();
+        cell.layoutMode = 'HORIZONTAL';
+        cell.primaryAxisSizingMode = 'AUTO';
+        cell.counterAxisSizingMode = 'FIXED';
+        cell.primaryAxisAlignItems = 'MIN';
+        cell.counterAxisAlignItems = 'MIN';
+        cell.fills = [];
+        cell.resize(1, cellH);
+        // Top-pad so label baseline aligns with circle center
+        cell.paddingTop = Math.round((sizePx - 16) / 2);
+        col2.appendChild(cell);
+        try { cell.layoutSizingHorizontal = 'HUG'; } catch (e) {}
+        const lbl = await makeLabelText(s.label, s.state);
+        cell.appendChild(lbl);
+      }
+      try { wrap.counterAxisAlignItems = 'MIN'; } catch (e) {}
     }
     return wrap;
   }

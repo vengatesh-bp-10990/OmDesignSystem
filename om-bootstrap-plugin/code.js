@@ -2150,32 +2150,54 @@ const FALLBACK_GLYPHS = {
 };
 
 async function findOrCreateIconComponent(name, iconsPage, iconDefaultVar) {
-  // Search across the document for an exact match first
+  // 1. Try the loose matcher across the icons page first (covers ZCat names
+  //    like "Icon/Search Outlined", "Icon/icon-home", etc.)
+  if (iconsPage) {
+    const loose = await findIconComp(iconsPage, [name]);
+    if (loose) return loose;
+  }
+
+  // 2. Search across the WHOLE document for an exact match
   const exact = figma.root.findOne(n =>
     n.type === 'COMPONENT' && (n.name === `Icon/${name}` || n.name === name)
   );
   if (exact) return exact;
 
-  // Try common synonyms
+  // 3. Synonyms (kept narrow — only well-known aliases)
   const synonyms = {
     'plus':         ['add', 'plus-circle'],
     'chevron-down': ['chevron-bottom', 'arrow-down', 'caret-down', 'down'],
     'arrow-left':   ['chevron-left', 'back', 'left'],
+    'x':            ['close', 'cross', 'remove', 'x-circle'],
+    'check':        ['tick', 'checkmark'],
+    'search':       ['magnifying-glass', 'find', 'lookup'],
+    'home':         ['house'],
+    'filter':       ['sliders-horizontal', 'adjustments', 'funnel'],
+    'info':         ['info-circle', 'information', 'help-circle'],
+    'check-circle': ['success', 'tick-circle'],
+    'alert-circle': ['error', 'error-circle', 'exclamation-circle'],
+    'alert-triangle':['warning', 'warning-triangle', 'exclamation-triangle'],
   };
   for (const alt of (synonyms[name] || [])) {
+    if (iconsPage) {
+      const loose = await findIconComp(iconsPage, [alt]);
+      if (loose) return loose;
+    }
     const found = figma.root.findOne(n =>
       n.type === 'COMPONENT' && (n.name === `Icon/${alt}` || n.name === alt)
     );
     if (found) return found;
   }
 
-  // Build fallback from inline SVG
+  // 4. Last resort — build fallback from inline SVG (and warn)
   const svg = FALLBACK_GLYPHS[name];
   if (!svg || !iconsPage) return null;
 
   const fallbackName = `Icon/_glyph-${name}`;
   const already = iconsPage.findOne(n => n.type === 'COMPONENT' && n.name === fallbackName);
   if (already) return already;
+
+  console.warn(`[OM DS] No existing icon found for "${name}" — creating fallback "${fallbackName}". Add the real icon to the Icons page or extend the synonyms list to remove this.`);
 
   const node = figma.createNodeFromSvg(svg);
   node.name = fallbackName;
@@ -2205,6 +2227,61 @@ async function findOrCreateIconComponent(name, iconsPage, iconDefaultVar) {
   if ('x' in node) { node.x = 0; node.y = 0; }
   iconsPage.appendChild(comp);
   return comp;
+}
+
+// ------------------------------------------------------------------
+// CLEANUP FALLBACK ICONS — removes Icon/_glyph-X components when a
+// real Icon/X (or matching synonym) now exists. Also detaches any
+// instances pointing to the fallback so they don't break visually.
+// Safe to run repeatedly.
+// ------------------------------------------------------------------
+async function cleanupFallbackIcons() {
+  console.log('[OM DS] cleanupFallbackIcons started');
+  try { await figma.loadAllPagesAsync(); } catch (e) {}
+
+  const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
+  if (!iconsPage) { figma.notify('No Icons page found.', { error: true }); return; }
+
+  // All _glyph-X fallbacks
+  const fallbacks = iconsPage.findAllWithCriteria({ types: ['COMPONENT'] })
+    .filter(c => c.name.startsWith('Icon/_glyph-'));
+  if (!fallbacks.length) { figma.notify('No fallback _glyph icons to clean up.'); return; }
+
+  let removed = 0, kept = 0;
+  for (const fb of fallbacks) {
+    const realName = fb.name.replace(/^Icon\/_glyph-/, '');
+    // Search all icons EXCLUDING the fallback set (pass an iconsPage proxy by
+    // temporarily renaming — simpler: just call findIconComp and reject self)
+    const candidates = iconsPage.findAllWithCriteria({ types: ['COMPONENT'] })
+      .filter(c => !c.name.startsWith('Icon/_glyph-'));
+    if (!candidates.length) { kept++; continue; }
+    // Use the same loose matcher logic inline (mirrors findIconComp)
+    const cands = candidates.map(n => {
+      const lower = n.name.toLowerCase();
+      const base = (lower.split('/').pop() || lower).trim();
+      const baseClean = base.replace(/^icon[-_ ]/, '').replace(/^_glyph-/, '');
+      const tokens = baseClean.split(/[-_ ]+/).filter(Boolean);
+      return { node: n, lower, base, baseClean, tokens };
+    });
+    const w = realName.toLowerCase();
+    let real = cands.find(c => c.lower === w || c.lower === `icon/${w}`);
+    if (!real) real = cands.find(c => c.base === w || c.baseClean === w);
+    if (!real) real = cands.find(c => c.tokens.indexOf(w) !== -1);
+    if (!real) real = cands.find(c => c.baseClean.indexOf(w) !== -1);
+    if (!real) { kept++; continue; }
+
+    // Swap any instances of the fallback to the real icon, then delete fallback
+    try {
+      const insts = figma.root.findAllWithCriteria({ types: ['INSTANCE'] })
+        .filter(i => i.mainComponent && i.mainComponent.id === fb.id);
+      for (const inst of insts) {
+        try { inst.swapComponent(real.node); } catch (e) {}
+      }
+      fb.remove();
+      removed++;
+    } catch (e) { kept++; }
+  }
+  figma.notify(`✅ Cleanup done: removed ${removed} fallback icons, kept ${kept} (no real match found).`);
 }
 
 // ------------------------------------------------------------------
@@ -5518,17 +5595,54 @@ function resizeIconInstance(inst, size) {
 }
 
 // Find an icon component by trying multiple common names.
+// Matching strategy (loose, in order):
+//   1. exact: name === w  OR  name === icon/w
+//   2. basename equals: last "/" segment === w  (case-insensitive)
+//   3. basename token: basename split by [-_ ] contains w as a whole token
+//   4. basename contains: basename includes w as substring
+// This avoids creating Icon/_glyph-X fallbacks when ZCat icons exist under
+// names like "Icon/Search Outlined", "Icon/search-line", "Icon/icon-home".
 async function findIconComp(iconsPage, names, fallbackColor) {
   if (!iconsPage) return null;
+  let allComps;
   try {
-    const allComps = iconsPage.findAllWithCriteria({ types: ['COMPONENT'] });
-    for (const w of names) {
-      const found = allComps.find(n => n.name.toLowerCase() === w
-        || n.name.toLowerCase() === `icon/${w}`
-        || n.name.toLowerCase().endsWith(`/${w}`));
-      if (found) return found;
-    }
-  } catch (e) {}
+    allComps = iconsPage.findAllWithCriteria({ types: ['COMPONENT'] });
+  } catch (e) { return null; }
+  if (!allComps || !allComps.length) return null;
+
+  // Pre-compute lowercased name + basename + tokens for each candidate
+  const cands = allComps.map(n => {
+    const lower = n.name.toLowerCase();
+    const base = (lower.split('/').pop() || lower).trim();
+    // strip leading "icon-" / "_glyph-" noise so user-imported "Icon/icon-home" matches "home"
+    const baseClean = base.replace(/^icon[-_ ]/, '').replace(/^_glyph-/, '');
+    const tokens = baseClean.split(/[-_ ]+/).filter(Boolean);
+    return { node: n, lower, base, baseClean, tokens };
+  });
+  // De-prioritize our own fallback _glyph-X components
+  const realFirst = cands.filter(c => !c.base.startsWith('_glyph-'));
+  const fallbacks = cands.filter(c =>  c.base.startsWith('_glyph-'));
+  const ordered = realFirst.concat(fallbacks);
+
+  for (const wRaw of names) {
+    const w = String(wRaw).toLowerCase();
+
+    // 1. exact
+    let hit = ordered.find(c => c.lower === w || c.lower === `icon/${w}`);
+    if (hit) return hit.node;
+
+    // 2. basename equals
+    hit = ordered.find(c => c.base === w || c.baseClean === w);
+    if (hit) return hit.node;
+
+    // 3. basename token equals (e.g. "search-outlined" → tokens ["search","outlined"] matches "search")
+    hit = ordered.find(c => c.tokens.indexOf(w) !== -1);
+    if (hit) return hit.node;
+
+    // 4. basename contains (e.g. "search-icon" matches "search")
+    hit = ordered.find(c => c.baseClean.indexOf(w) !== -1);
+    if (hit) return hit.node;
+  }
   return null;
 }
 
@@ -9552,6 +9666,8 @@ async function rebuildAll() {
       await buildSkeleton();
     } else if (figma.command === 'buildAccordion') {
       await buildAccordion();
+    } else if (figma.command === 'cleanupFallbackIcons') {
+      await cleanupFallbackIcons();
     } else {
       await bootstrap();
     }

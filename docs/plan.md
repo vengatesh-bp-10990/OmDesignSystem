@@ -1,5 +1,8 @@
 # OM Design System — Build Plan
 
+## Deferred refactor (after Phase 4 complete)
+**Per-component token backfill (Option A)** — currently Label, Chip, TextField, Textarea, Dropdown and ALL Phase 4 molecules bind directly to semantic `_Appearance`/`_Theme` tokens via `resolveFormTokens()`. This violates the locked "layers bind to `Component/{Name}/...` only" rule. Plan: finish all molecules first, then add `Component/{Label, Chip, TextField, Textarea, Dropdown, MenuItem, DropdownMenu, SearchBar, Breadcrumb, Tabs, Pagination, Card, Alert, Toast, Progress, Skeleton, Accordion, Tag, ...Pickers}` collections aliasing the existing semantic vars, rewire each builder, then full rebuild. Aliases preserve visuals → zero design risk. See `/memories/session/token-refactor-deferred.md`.
+
 ## Status (as of last session)
 
 ### ✅ Completed

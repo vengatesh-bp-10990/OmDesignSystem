@@ -14004,17 +14004,51 @@ async function buildTableCells() {
   let monoFont = { family: 'Inter', style: 'Regular' };
   try { await figma.loadFontAsync({ family: 'Roboto Mono', style: 'Regular' }); monoFont = { family: 'Roboto Mono', style: 'Regular' }; } catch (e) {}
 
-  // Atom dependencies (best-effort)
-  const avatarSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Avatar');
-  const badgeSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Badge');
-  const checkboxSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Checkbox');
-  const toggleSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Toggle');
-  const iconBtnSet = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'IconButton');
-  const progressSet = moleculesPage && moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Progress');
+  // Atom dependencies (best-effort) — search ALL pages, not just atomsPage
+  function findSetAnywhere(name) {
+    for (const p of figma.root.children) {
+      const found = p.findOne(n => n.type === 'COMPONENT_SET' && n.name === name);
+      if (found) return found;
+    }
+    return null;
+  }
+  const avatarSet = findSetAnywhere('Avatar');
+  const badgeSet = findSetAnywhere('Badge');
+  const checkboxSet = findSetAnywhere('Checkbox');
+  const toggleSet = findSetAnywhere('Toggle');
+  const iconBtnSet = findSetAnywhere('IconButton');
+  const progressSet = findSetAnywhere('Progress');
+  const _missing = [];
+  if (!avatarSet) _missing.push('Avatar');
+  if (!badgeSet) _missing.push('Badge');
+  if (!checkboxSet) _missing.push('Checkbox');
+  if (!toggleSet) _missing.push('Toggle');
+  if (!iconBtnSet) _missing.push('IconButton');
+  if (!progressSet) _missing.push('Progress');
+  if (_missing.length) {
+    console.warn(`[OM DS] Table Cells: missing atoms — ${_missing.join(', ')}. Run those builders first.`);
+    figma.notify(`⚠️ Table Cells missing atoms: ${_missing.join(', ')} — run those builders first.`, { timeout: 5000 });
+  }
 
   function findVariant(set, regexes) {
     if (!set) return null;
     return set.children.find(c => regexes.every(r => r.test(c.name))) || set.children[0];
+  }
+  // Visible placeholder so empty cells aren't 1px tall
+  function placeholder(label) {
+    const f = figma.createFrame();
+    f.name = label;
+    f.layoutMode = 'HORIZONTAL';
+    f.primaryAxisAlignItems = 'CENTER';
+    f.counterAxisAlignItems = 'CENTER';
+    f.paddingLeft = f.paddingRight = 8;
+    f.paddingTop = f.paddingBottom = 6;
+    f.cornerRadius = 4;
+    f.fills = [paintForVar(required['state/disabled-bg'])];
+    f.strokes = [paintForVar(required['border/default'])];
+    f.strokeWeight = 1;
+    f.dashPattern = [3, 3];
+    return f;
   }
   async function makeText(txt, styleName, colorVar, opts) {
     const t = figma.createText();
@@ -14101,7 +14135,14 @@ async function buildTableCells() {
       const v = findVariant(iconBtnSet, [/Variant=Ghost/, new RegExp(`Size=${size}`), /State=Default/]) ||
                 findVariant(iconBtnSet, [/Variant=Ghost/, /State=Default/]) ||
                 findVariant(iconBtnSet, [/Variant=Ghost/]);
-      if (v) cell.appendChild(v.createInstance());
+      if (v) {
+        const inst = v.createInstance();
+        cell.appendChild(inst);
+      } else {
+        const ph = placeholder('⋯');
+        cell.appendChild(ph);
+        ph.appendChild(await makeText('⋯', TABLE_CELL_DENSITY[density].text, tk('text/secondary')));
+      }
     },
   });
 
@@ -14112,6 +14153,11 @@ async function buildTableCells() {
                 findVariant(checkboxSet, [/Checked=Unchecked/, /State=Default/, /Content=No Label/]) ||
                 findVariant(checkboxSet, [/Checked=Unchecked/, /State=Default/]);
       if (v) cell.appendChild(v.createInstance());
+      else {
+        const ph = placeholder('☐');
+        cell.appendChild(ph);
+        ph.appendChild(await makeText('☐', TABLE_CELL_DENSITY[density].text, tk('text/secondary')));
+      }
     },
   });
 
@@ -14170,6 +14216,11 @@ async function buildTableCells() {
                 findVariant(toggleSet, [/Selected=Off/, /State=Default/, /Content=No Label/]) ||
                 findVariant(toggleSet, [/Selected=Off/, /State=Default/]);
       if (v) cell.appendChild(v.createInstance());
+      else {
+        const ph = placeholder('toggle');
+        cell.appendChild(ph);
+        ph.appendChild(await makeText('○—', TABLE_CELL_DENSITY[density].text, tk('text/secondary')));
+      }
     },
   });
 

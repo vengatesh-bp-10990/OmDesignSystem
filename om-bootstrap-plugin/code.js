@@ -7994,26 +7994,25 @@ async function buildTabs() {
       return { bg: null, text, border: null, indicator: state === 'Active' ? required['brand/primary'] : null };
     }
     if (style === 'Boxy') {
-      // Active = brand orange filled pill (white text on orange).
-      // Hover  = brand-subtle / muted peach tint so it stands out against
-      //          either page surface or a Pill-style grey container.
+      // Active = very light brand-subtle pill (peach tint) + brand orange text.
+      // Hover  = neutral greyish bg so it's clearly distinct from Active and
+      //          from the page surface.
       if (state === 'Active') {
-        return { bg: required['brand/primary'], text: required['brand/on-primary'] || required['surface/card'], border: required['brand/primary'], indicator: null };
+        return { bg: required['brand/primary-subtle'] || required['brand/primary-muted'], text: required['brand/primary'], border: null, indicator: null };
       }
       if (state === 'Hover') {
-        const hoverBg = required['brand/primary-muted'] || required['brand/primary-subtle'] || required['state/disabled-bg'];
-        return { bg: hoverBg, text: required['brand/primary'], border: null, indicator: null };
+        return { bg: required['state/disabled-bg'], text: required['text/primary'], border: null, indicator: null };
       }
       return { bg: null, text: required['text/secondary'], border: null, indicator: null };
     }
     // Pill — soft, surface-toned (active = white pill on grey container, brand text + counter)
     const bg =
       state === 'Active' ? required['surface/card'] :
-      state === 'Hover'  ? required['brand/primary-muted'] || required['brand/primary-subtle'] || required['state/disabled-bg'] :
+      state === 'Hover'  ? required['state/disabled-bg'] :
                             null;
     const text =
       state === 'Active' ? required['brand/primary'] :
-      state === 'Hover'  ? required['brand/primary'] :
+      state === 'Hover'  ? required['text/primary'] :
                             required['text/secondary'];
     return { bg, text, border: null, indicator: null };
   }

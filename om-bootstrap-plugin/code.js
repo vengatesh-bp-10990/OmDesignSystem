@@ -4467,6 +4467,19 @@ async function buildTooltip() {
     if (action === 'Button') {
       const ghost = findGhostBtn(size === 'Small' ? 'XS' : 'Small');
       if (ghost) {
+        // Wrap action in a row that fills bubble width so it can right-align
+        const actionRow = figma.createFrame();
+        actionRow.name = 'Actions';
+        actionRow.layoutMode = 'HORIZONTAL';
+        actionRow.primaryAxisSizingMode = 'FIXED';
+        actionRow.counterAxisSizingMode = 'AUTO';
+        actionRow.primaryAxisAlignItems = 'MAX';     // right align
+        actionRow.counterAxisAlignItems = 'CENTER';
+        actionRow.itemSpacing = 8;
+        actionRow.paddingLeft = actionRow.paddingRight = 0;
+        actionRow.paddingTop = actionRow.paddingBottom = 0;
+        actionRow.fills = [];
+
         const inst = ghost.createInstance();
         inst.name = 'Action';
         // Set the label text on the instance
@@ -4477,7 +4490,9 @@ async function buildTooltip() {
             txt.characters = 'Learn More';
           }
         } catch (e) {}
-        bubble.appendChild(inst);
+        actionRow.appendChild(inst);
+        bubble.appendChild(actionRow);
+        try { actionRow.layoutSizingHorizontal = 'FILL'; actionRow.layoutSizingVertical = 'HUG'; } catch (e) {}
       }
     }
 

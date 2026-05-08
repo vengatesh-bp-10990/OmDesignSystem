@@ -13883,7 +13883,7 @@ const TABLE_CELL_DENSITY = {
   Default:     { padY: 12, text: 'Body/Default', sub: 'Body/Small', icon: 14, avatar: 'Small',  gap: 8,  width: 280 },
   Comfortable: { padY: 16, text: 'Body/Default', sub: 'Body/Small', icon: 16, avatar: 'Medium', gap: 10, width: 320 },
 };
-const TABLE_CELL_DENSITIES = ['Compact', 'Default', 'Comfortable'];
+const TABLE_CELL_DENSITIES = ['Default'];
 const TABLE_CELL_PAD_X = 16;
 
 // Per-type width multipliers (1 = standard density width)

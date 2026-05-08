@@ -9694,7 +9694,7 @@ async function buildCalendar() {
   await figma.setCurrentPageAsync(atomsPage);
 
   // Idempotent cleanup
-  for (const name of ['Day Cell', 'Calendar']) {
+  for (const name of ['Day Cell', '_Day Cell', 'Calendar', '_Day Cell — Showcase']) {
     const ex = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === name);
     if (ex) ex.remove();
     for (const n of atomsPage.children.filter(c => c.type === 'FRAME' && c.name === name)) n.remove();
@@ -9764,7 +9764,7 @@ async function buildCalendar() {
     dayVariants.push(await makeDayCell(DAY_STATES[i], lbl));
   }
   const dayCellSet = figma.combineAsVariants(dayVariants, atomsPage);
-  dayCellSet.name = 'Day Cell';
+  dayCellSet.name = '_Day Cell';
   dayCellSet.layoutMode = 'NONE';
   dayCellSet.fills = [];
   // Lay out Day Cell variants in a row
@@ -9774,7 +9774,22 @@ async function buildCalendar() {
     for (const v of dayVariants) { v.x = x; v.y = PAD; x += CELL_W + GAP; }
     dayCellSet.resize(x - GAP + PAD, PAD * 2 + CELL_H);
   }
-  autoPositionBelow(atomsPage, dayCellSet, 100);
+
+  // Showcase wrapper for Day Cell (matches other atom showcases)
+  if (typeof _tableShowcase === 'function') {
+    await _tableShowcase({
+      page: atomsPage,
+      compSets: [dayCellSet],
+      title: '_Day Cell',
+      subtitle: 'Internal calendar atom — 9 state variants (Default / Hover / Today / Selected / In-Range / Range-Start / Range-End / Disabled / Outside-Month). Composed by Calendar; not for direct use. Prefixed with _ so library publish skips it.',
+      surfaceVar: required['surface/card'],
+      borderVar: required['border/default'],
+      primaryVar: required['text/primary'],
+      secondaryVar: required['text/secondary'],
+    });
+  } else {
+    autoPositionBelow(atomsPage, dayCellSet, 100);
+  }
 
   // ---------- 2. Calendar component set --------------------------------------
   // Sample month = May 2026 (May 1 = Friday). Grid (Sun-start):
@@ -14287,7 +14302,7 @@ async function buildTableCells() {
   // ---- Build all cell types ----------------------------------------------
   const built = [];
   for (const T of TYPES) {
-    const setName = `Table Cell - ${T.name}`;
+    const setName = `_Table Cell - ${T.name}`;
     // Idempotent
     const _ex = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === setName);
     if (_ex) _ex.remove();
@@ -14329,7 +14344,7 @@ async function buildTableCells() {
     page: atomsPage,
     compSets: built,
     title: 'Table Cells',
-    subtitle: '13 cell types × 3 densities (Compact / Default / Comfortable). Cells have transparent background — the Row owns state coloring. Swap cell instances inside a Row to customize columns.',
+    subtitle: '13 cell types — single density (44px row). Cells have transparent background — the Row owns state coloring. Swap cell instances inside a Row to customize columns. Internal-only — prefixed with _ so library publish skips them.',
     surfaceVar: required['surface/card'],
     borderVar: required['border/default'],
     primaryVar: required['text/primary'],
@@ -14371,9 +14386,9 @@ async function buildTableHeaderCell() {
   const iconsPage = figma.root.children.find(p => p.name.includes('Icons'));
   await figma.setCurrentPageAsync(atomsPage);
 
-  const _ex = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Table Header Cell');
+  const _ex = atomsPage.findOne(n => n.type === 'COMPONENT_SET' && (n.name === '_Table Header Cell' || n.name === 'Table Header Cell'));
   if (_ex) _ex.remove();
-  for (const n of atomsPage.children.filter(c => c.type === 'FRAME' && (c.name === 'Table Header Cell' || c.name === 'Table Header Cell — Showcase'))) n.remove();
+  for (const n of atomsPage.children.filter(c => c.type === 'FRAME' && (c.name === '_Table Header Cell' || c.name === 'Table Header Cell' || c.name === '_Table Header Cell — Showcase' || c.name === 'Table Header Cell — Showcase'))) n.remove();
 
   const styles = await figma.getLocalTextStylesAsync();
   const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
@@ -14441,7 +14456,7 @@ async function buildTableHeaderCell() {
   }
 
   const compSet = figma.combineAsVariants(variants, atomsPage);
-  compSet.name = 'Table Header Cell';
+  compSet.name = '_Table Header Cell';
   compSet.layoutMode = 'VERTICAL';
   compSet.itemSpacing = 16;
   compSet.paddingLeft = compSet.paddingRight = 32;
@@ -14453,7 +14468,7 @@ async function buildTableHeaderCell() {
   await _tableShowcase({
     page: atomsPage,
     compSets: [compSet],
-    title: 'Table Header Cell',
+    title: '_Table Header Cell',
     subtitle: '18 variants — Sort (None / Asc / Desc) × Align (Left / Right / Center) × State (Default / Hover). Sort chevron rotates with sort direction; active state uses brand color.',
     surfaceVar: required['surface/card'],
     borderVar: required['border/default'],
@@ -14496,12 +14511,12 @@ async function buildTableRow() {
   const atomsPage = figma.root.children.find(p => p.name.includes('Atoms'));
   await figma.setCurrentPageAsync(moleculesPage);
 
-  const _ex = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Table Row');
+  const _ex = moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && (n.name === '_Table Row' || n.name === 'Table Row'));
   if (_ex) _ex.remove();
-  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && (c.name === 'Table Row' || c.name === 'Table Row — Showcase'))) n.remove();
+  for (const n of moleculesPage.children.filter(c => c.type === 'FRAME' && (c.name === '_Table Row' || c.name === 'Table Row' || c.name === '_Table Row — Showcase' || c.name === 'Table Row — Showcase'))) n.remove();
 
   // Sample cell to slot in (Text cell, Default density). User can swap.
-  const textCellSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Table Cell - Text');
+  const textCellSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && (n.name === '_Table Cell - Text' || n.name === 'Table Cell - Text'));
   const textCellDef = textCellSet && (textCellSet.children.find(c => /Density=Default/.test(c.name)) || textCellSet.children[0]);
 
   const STATES = ['Default', 'Hover', 'Selected', 'Disabled', 'Pressed', 'Focused', 'Error', 'Warning'];
@@ -14545,7 +14560,7 @@ async function buildTableRow() {
   }
 
   const compSet = figma.combineAsVariants(variants, moleculesPage);
-  compSet.name = 'Table Row';
+  compSet.name = '_Table Row';
   compSet.layoutMode = 'VERTICAL';
   compSet.itemSpacing = 16;
   compSet.paddingLeft = compSet.paddingRight = 32;
@@ -14557,7 +14572,7 @@ async function buildTableRow() {
   await _tableShowcase({
     page: moleculesPage,
     compSets: [compSet],
-    title: 'Table Row',
+    title: '_Table Row',
     subtitle: '8 state variants (Default / Hover / Selected / Disabled / Pressed / Focused / Error / Warning). Width 720px responsive. Slots 3 sample cells — swap to any Table Cell type from Assets to customize columns.',
     surfaceVar: required['surface/card'],
     borderVar: required['border/default'],
@@ -14618,12 +14633,12 @@ async function buildDataTable() {
     }
     return null;
   }
-  const tableRowSet = findSetAnywhere('Table Row');
-  const tableHeaderCellSet = findSetAnywhere('Table Header Cell');
-  const tableCellTextSet = findSetAnywhere('Table Cell - Text');
-  const tableCellUserSet = findSetAnywhere('Table Cell - User');
-  const tableCellBadgeSet = findSetAnywhere('Table Cell - Badge');
-  const tableCellActionsSet = findSetAnywhere('Table Cell - Actions');
+  const tableRowSet = findSetAnywhere('_Table Row') || findSetAnywhere('Table Row');
+  const tableHeaderCellSet = findSetAnywhere('_Table Header Cell') || findSetAnywhere('Table Header Cell');
+  const tableCellTextSet = findSetAnywhere('_Table Cell - Text') || findSetAnywhere('Table Cell - Text');
+  const tableCellUserSet = findSetAnywhere('_Table Cell - User') || findSetAnywhere('Table Cell - User');
+  const tableCellBadgeSet = findSetAnywhere('_Table Cell - Badge') || findSetAnywhere('Table Cell - Badge');
+  const tableCellActionsSet = findSetAnywhere('_Table Cell - Actions') || findSetAnywhere('Table Cell - Actions');
   const checkboxSet = findSetAnywhere('Checkbox');
   const buttonSet = findSetAnywhere('Button');
   const searchBarSet = findSetAnywhere('Search Bar') || findSetAnywhere('SearchBar');
@@ -14632,7 +14647,7 @@ async function buildDataTable() {
   const _missing = [];
   if (!tableRowSet) _missing.push('Table Row');
   if (!tableHeaderCellSet) _missing.push('Table Header Cell');
-  if (!tableCellTextSet) _missing.push('Table Cell - Text');
+  if (!tableCellTextSet) _missing.push('_Table Cell - Text');
   if (_missing.length) {
     figma.notify(`⚠️ Data Table missing: ${_missing.join(', ')} — run those builders first.`, { timeout: 6000 });
     console.warn('[OM DS] Data Table missing dependencies:', _missing);
@@ -15060,6 +15075,32 @@ async function buildDataTable() {
 async function buildAllWired() {
   console.log('[OM DS] buildAllWired started');
   try { await figma.loadAllPagesAsync(); } catch (e) {}
+
+  // 0. RESET — sweep all old COMPONENT_SETs, orphan COMPONENTs and showcase
+  //    FRAMEs across every design page so we rebuild from a clean slate.
+  //    Only sweeps the design pages we own (Atoms / Molecules / Organisms /
+  //    Patterns / Documentation). Foundations / Tokens / Typography / Colors
+  //    / Icons / Cover are LEFT ALONE so tokens, text styles & icon sources
+  //    survive.
+  const SWEEP_PAGE_KEYS = ['Atoms', 'Molecules', 'Organisms', 'Patterns', 'Documentation'];
+  const sweptPages = [];
+  let removed = 0;
+  for (const page of figma.root.children) {
+    if (!SWEEP_PAGE_KEYS.some(k => page.name.includes(k))) continue;
+    sweptPages.push(page.name);
+    // Remove every COMPONENT_SET on this page
+    for (const n of [...page.children]) {
+      if (n.type === 'COMPONENT_SET' || n.type === 'COMPONENT') { try { n.remove(); removed++; } catch (e) {} }
+      else if (n.type === 'FRAME' && (
+        / — Showcase$/.test(n.name) ||
+        /^_?Table /.test(n.name) ||
+        /^Tabs Examples?$/.test(n.name)
+      )) {
+        try { n.remove(); removed++; } catch (e) {}
+      }
+    }
+  }
+  console.log(`[OM DS] buildAllWired RESET: removed=${removed} from pages=[${sweptPages.join(', ')}]`);
 
   // 1. Ensure all Component/X collections exist (also creates them upfront so
   //    resolveFormTokens(name) substitutions inside each builder hit existing

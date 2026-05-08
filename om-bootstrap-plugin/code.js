@@ -15102,9 +15102,25 @@ async function buildAllWired() {
   }
   console.log(`[OM DS] buildAllWired RESET: removed=${removed} from pages=[${sweptPages.join(', ')}]`);
 
-  // 1. Ensure all Component/X collections exist (also creates them upfront so
-  //    resolveFormTokens(name) substitutions inside each builder hit existing
-  //    vars rather than racing creation).
+  // 1a. FOUNDATIONS — create pages, _Primitives / _Appearance / _Theme
+  //     collections, Typography / Spacing / Radius / Shadows vars, and
+  //     all OM text styles bound to the Inter/JetBrains Mono fonts.
+  //     bootstrap() is fully idempotent; it skips collections that
+  //     already exist and re-uses existing text style IDs.
+  console.log('[OM DS] buildAllWired: bootstrap (foundations + text styles)…');
+  try { await bootstrap(); } catch (e) { console.error('[OM DS] bootstrap failed:', e); }
+
+  // 1b. ICONS — build the Icon Source Frame + all Icon components on the
+  //     Icons page. IconButton / SearchBar / TextField / Dropdown etc.
+  //     all instance these via cross-page lookup, so they MUST exist
+  //     before any component builder runs.
+  console.log('[OM DS] buildAllWired: icons…');
+  try { await buildIconComponents(); } catch (e) { console.error('[OM DS] buildIcons failed:', e); }
+
+  // 1c. Ensure all Component/X collections exist (also creates them upfront
+  //     so resolveFormTokens(name) substitutions inside each builder hit
+  //     existing vars rather than racing creation).
+  console.log('[OM DS] buildAllWired: component tokens…');
   await buildComponentTokens();
 
   // 2. Build order honors atomic-composition dependencies:

@@ -14570,13 +14570,18 @@ async function buildTableRow() {
 }
 
 // =============================================================================
-// DATA TABLE (Organism) — Phase 5
-// Web-app data table with toolbar, sortable header, body rows, footer.
-// Composes: Checkbox (selection), IconButton (sort/menu), Button (toolbar),
-// SearchBar, Pagination (footer), Avatar (sample cell), Badge (status).
-// Variants: Density = Default | Compact (rows)
-//           Layout  = Default | With-Selection (cols)
-// = 4 variants. Width 1080.
+// DATA TABLE (Organism) — Phase 5 modular composer
+// Composes the new modular table atoms (Table Header Cell, Table Row, Table
+// Cell - X) into a fully customizable web-app data table. NO density axis —
+// single Default density. Per-row interaction states are encoded inside the
+// Table Row instances themselves: click any row inside a Data Table instance
+// in Figma and the design panel exposes the State variant (Default / Hover /
+// Selected / Disabled / Pressed / Focused / Error / Warning).
+//
+// Variants on the Data Table itself: Layout × State
+//   Layout: Default | With-Selection
+//   State : Default | Loading | Empty
+// = 6 variants. Width 1080.
 // =============================================================================
 async function buildDataTable() {
   console.log('[OM DS] buildDataTable started');
@@ -14594,28 +14599,50 @@ async function buildDataTable() {
   }
   const FALLBACK = {
     'surface': 'surface/card', 'border/outer': 'border/default',
-    'header/bg': 'surface/base', 'header/text': 'text/secondary',
-    'header/icon': 'icon/subtle', 'header/border': 'border/default',
-    'row/bg/default': 'surface/card', 'row/bg/hover': 'state/disabled-bg',
-    'row/bg/selected': 'brand/primary-subtle', 'row/bg/zebra': 'surface/base',
-    'row/border': 'border/default',
-    'cell/text': 'text/primary', 'cell/text/secondary': 'text/secondary',
-    'cell/text/disabled': 'state/disabled-text', 'cell/icon': 'icon/default',
     'toolbar/bg': 'surface/card', 'toolbar/border': 'border/default',
     'toolbar/text': 'text/primary', 'toolbar/text/muted': 'text/secondary',
     'footer/bg': 'surface/base', 'footer/border': 'border/default',
-    'footer/text': 'text/secondary', 'selection/checkbox': 'brand/primary',
+    'footer/text': 'text/secondary',
   };
   const dt = (n) => dtVars[n] || required[FALLBACK[n] || 'text/primary'];
 
+  // Pages
   const organismsPage = figma.root.children.find(p => p.name.includes('Organisms')) || figma.currentPage;
-  const moleculesPage = figma.root.children.find(p => p.name.includes('Molecules'));
-  const atomsPage = figma.root.children.find(p => p.name.includes('Atoms'));
   await figma.setCurrentPageAsync(organismsPage);
 
+  // Find dependency atom/molecule sets across all pages
+  function findSetAnywhere(name) {
+    for (const p of figma.root.children) {
+      const found = p.findOne(n => n.type === 'COMPONENT_SET' && n.name === name);
+      if (found) return found;
+    }
+    return null;
+  }
+  const tableRowSet = findSetAnywhere('Table Row');
+  const tableHeaderCellSet = findSetAnywhere('Table Header Cell');
+  const tableCellTextSet = findSetAnywhere('Table Cell - Text');
+  const tableCellUserSet = findSetAnywhere('Table Cell - User');
+  const tableCellBadgeSet = findSetAnywhere('Table Cell - Badge');
+  const tableCellActionsSet = findSetAnywhere('Table Cell - Actions');
+  const checkboxSet = findSetAnywhere('Checkbox');
+  const buttonSet = findSetAnywhere('Button');
+  const searchBarSet = findSetAnywhere('Search Bar') || findSetAnywhere('SearchBar');
+  const paginationSet = findSetAnywhere('Pagination');
+
+  const _missing = [];
+  if (!tableRowSet) _missing.push('Table Row');
+  if (!tableHeaderCellSet) _missing.push('Table Header Cell');
+  if (!tableCellTextSet) _missing.push('Table Cell - Text');
+  if (_missing.length) {
+    figma.notify(`⚠️ Data Table missing: ${_missing.join(', ')} — run those builders first.`, { timeout: 6000 });
+    console.warn('[OM DS] Data Table missing dependencies:', _missing);
+    return;
+  }
+
+  // Idempotent
   const _exist = organismsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Data Table');
   if (_exist) _exist.remove();
-  for (const n of organismsPage.children.filter(c => c.type === 'FRAME' && c.name === 'Data Table')) n.remove();
+  for (const n of organismsPage.children.filter(c => c.type === 'FRAME' && (c.name === 'Data Table' || c.name === 'Data Table — Showcase'))) n.remove();
 
   const styles = await figma.getLocalTextStylesAsync();
   const styleByName = {}; for (const s of styles) styleByName[s.name] = s;
@@ -14623,76 +14650,95 @@ async function buildDataTable() {
   await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
   await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
 
-  const checkboxSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Checkbox');
-  const iconBtnSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'IconButton');
-  const buttonSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Button');
-  const searchBarSet = moleculesPage && moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && (n.name === 'Search Bar' || n.name === 'SearchBar'));
-  const paginationSet = moleculesPage && moleculesPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Pagination');
-  const badgeSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Badge');
-  const avatarSet = atomsPage && atomsPage.findOne(n => n.type === 'COMPONENT_SET' && n.name === 'Avatar');
-
-  function findCheckbox(checked, state) {
-    if (!checkboxSet) return null;
-    const want = `Checked=${checked}`;
-    const wantState = `State=${state}`;
-    return checkboxSet.children.find(c => new RegExp(want).test(c.name) && new RegExp(wantState).test(c.name) && /Size=Small/.test(c.name))
-        || checkboxSet.children.find(c => new RegExp(want).test(c.name) && new RegExp(wantState).test(c.name))
-        || checkboxSet.children[0];
+  // ---- Helpers --------------------------------------------------------------
+  function pickVariant(set, regexes) {
+    if (!set) return null;
+    return set.children.find(c => regexes.every(r => r.test(c.name))) || set.children[0];
   }
-  function findIconBtn(size) {
-    if (!iconBtnSet) return null;
-    return iconBtnSet.children.find(c => new RegExp(`Variant=Ghost`).test(c.name) && new RegExp(`Size=${size}`).test(c.name) && /State=Default/.test(c.name))
-        || iconBtnSet.children[0];
-  }
-  function findButton(color, size) {
-    if (!buttonSet) return null;
-    return buttonSet.children.find(c => c.name === `Type=Default, Color=${color}, Size=${size}, State=Default`)
-        || buttonSet.children[0];
-  }
-  function findSearchBar(size) {
-    if (!searchBarSet) return null;
-    const want = size ? new RegExp(`Size=${size}`) : /Size=/;
-    return searchBarSet.children.find(c => want.test(c.name) && /State=Default/.test(c.name) && /Content=Empty/.test(c.name))
-        || searchBarSet.children[0];
-  }
-  function findPagination() {
-    if (!paginationSet) return null;
-    return paginationSet.children[0];
-  }
-  function findBadge(color) {
-    if (!badgeSet) return null;
-    return badgeSet.children.find(c => new RegExp(`Color=${color}`).test(c.name))
-        || badgeSet.children[0];
-  }
-  function findAvatar(size) {
-    if (!avatarSet) return null;
-    return avatarSet.children.find(c => new RegExp(`Size=${size}`).test(c.name)) || avatarSet.children[0];
-  }
-  async function setText(node, txt) {
-    const t = node.findOne(n => n.type === 'TEXT');
-    if (!t) return;
-    try { await figma.loadFontAsync(t.fontName); } catch (e) {}
-    try { t.characters = txt; } catch (e) {}
+  async function makeText(txt, styleName, colorVar, opts) {
+    const t = figma.createText();
+    const s = styleByName[styleName];
+    if (s) await t.setTextStyleIdAsync(s.id);
+    t.characters = txt;
+    if (colorVar) t.fills = [paintForVar(colorVar)];
+    if (opts && opts.align) t.textAlignHorizontal = opts.align;
+    return t;
   }
 
-  const WIDTH = 1080;
-  const SAMPLE_ROWS = [
-    { name: 'Aarav Mehta',    email: 'aarav@om.dev',    role: 'Admin',  status: 'Success' },
-    { name: 'Bianca Romano',  email: 'bianca@om.dev',   role: 'Editor', status: 'Info' },
-    { name: 'Chen Wei',       email: 'wei@om.dev',      role: 'Viewer', status: 'Warning' },
-    { name: 'Diana Schmidt',  email: 'diana@om.dev',    role: 'Editor', status: 'Success' },
-    { name: 'Ethan Brooks',   email: 'ethan@om.dev',    role: 'Viewer', status: 'Danger' },
+  // Sample data — 5 team members
+  const SAMPLE = [
+    { name: 'Aarav Mehta',   email: 'aarav@om.dev',   role: 'Admin',  status: 'Success', statusLabel: 'Active' },
+    { name: 'Bianca Romano', email: 'bianca@om.dev',  role: 'Editor', status: 'Info',    statusLabel: 'Pending' },
+    { name: 'Chen Wei',      email: 'wei@om.dev',     role: 'Viewer', status: 'Warning', statusLabel: 'Idle' },
+    { name: 'Diana Schmidt', email: 'diana@om.dev',   role: 'Editor', status: 'Success', statusLabel: 'Active' },
+    { name: 'Ethan Brooks',  email: 'ethan@om.dev',   role: 'Viewer', status: 'Danger',  statusLabel: 'Suspended' },
   ];
 
-  async function buildVariant(layout, density) {
-    const isCompact = density === 'Compact';
-    const hasSelection = layout === 'With-Selection';
-    const ROW_H = isCompact ? 40 : 52;
-    const HEAD_H = isCompact ? 36 : 44;
-    const cellPadX = 16;
+  const TABLE_W = 1080;
+
+  // ---- Build a single sample row using cell instances ----------------------
+  // The row instance carries its own State variant; we override the inner cell
+  // text/badge/avatar via instance overrides so 5 different rows show 5
+  // different sample records but each is still a Table Row instance.
+  async function buildSampleRow(record, rowState, withSelection) {
+    if (!tableRowSet) return null;
+    const rowVariant = tableRowSet.children.find(c => new RegExp(`State=${rowState}`).test(c.name)) || tableRowSet.children[0];
+    const rowInst = rowVariant.createInstance();
+    rowInst.name = `${record.name} (${rowState})`;
+    try { rowInst.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+
+    // The row instance already has 3 sample Text cells inside. We need to
+    // RESET its content: detach cells, swap to actual cell types, override text.
+    // Easier approach: leave the instance as-is structurally, then re-target its
+    // cell instances via swap.
+    // Find the cell instances inside the row (instances of Table Cell - Text)
+    const innerCells = rowInst.findChildren(n => n.type === 'INSTANCE');
+
+    // We want columns: [optional Checkbox], User, Email, Role, Badge
+    // The Row template has 3 Text cells. Swap each one.
+    // If withSelection: we'd need a 4th cell — but Row template only has 3.
+    // So for selection layout we'll instead OVERLAY a checkbox column outside
+    // the row content; the row still carries the right state bg.
+    // Simpler & cleaner: rebuild content inside the row instance.
+    // --- Detach approach is destructive; instead we override children. ---
+
+    // Override 1st cell → User cell
+    if (innerCells[0] && tableCellUserSet) {
+      const userVariant = tableCellUserSet.children.find(c => /Density=Default/.test(c.name)) || tableCellUserSet.children[0];
+      try { innerCells[0].swapComponent(userVariant); } catch (e) {}
+      // Override the name text inside
+      const innerTexts = innerCells[0].findAll(n => n.type === 'TEXT');
+      if (innerTexts[0]) {
+        try { await figma.loadFontAsync(innerTexts[0].fontName); innerTexts[0].characters = record.name; } catch (e) {}
+      }
+      if (innerTexts[1]) {
+        try { await figma.loadFontAsync(innerTexts[1].fontName); innerTexts[1].characters = record.email; } catch (e) {}
+      }
+    }
+    // Override 2nd cell → Text cell with role
+    if (innerCells[1]) {
+      const txt = innerCells[1].findOne(n => n.type === 'TEXT');
+      if (txt) { try { await figma.loadFontAsync(txt.fontName); txt.characters = record.role; } catch (e) {} }
+    }
+    // Override 3rd cell → Badge cell
+    if (innerCells[2] && tableCellBadgeSet) {
+      const badgeVariant = tableCellBadgeSet.children.find(c => /Density=Default/.test(c.name)) || tableCellBadgeSet.children[0];
+      try { innerCells[2].swapComponent(badgeVariant); } catch (e) {}
+      const badgeText = innerCells[2].findOne(n => n.type === 'TEXT');
+      if (badgeText) { try { await figma.loadFontAsync(badgeText.fontName); badgeText.characters = record.statusLabel; } catch (e) {} }
+    }
+
+    return rowInst;
+  }
+
+  // ---- Build the table for one (layout, state) combo -----------------------
+  async function buildOneTable(layout, tableState) {
+    const isWithSelection = layout === 'With-Selection';
+    const isLoading = tableState === 'Loading';
+    const isEmpty = tableState === 'Empty';
 
     const comp = figma.createComponent();
-    comp.name = `Layout=${layout}, Density=${density}`;
+    comp.name = `Layout=${layout}, State=${tableState}`;
     comp.layoutMode = 'VERTICAL';
     comp.itemSpacing = 0;
     comp.fills = [paintForVar(dt('surface'))];
@@ -14701,361 +14747,307 @@ async function buildDataTable() {
     comp.strokeAlign = 'INSIDE';
     comp.cornerRadius = 12;
     comp.clipsContent = true;
-    comp.resize(WIDTH, 1);
-    // Re-apply AFTER resize so children grow height (FIXED width, HUG height).
-    comp.counterAxisSizingMode = 'FIXED';
-    comp.primaryAxisSizingMode = 'AUTO';
+    comp.resize(TABLE_W, 1);
+    comp.primaryAxisSizingMode = 'AUTO';   // VERTICAL → primary=Y, hug height
+    comp.counterAxisSizingMode = 'FIXED';  // fixed width
 
-    // ---- Toolbar ----------------------------------------------------------
+    // ---- Toolbar ---------------------------------------------------------
     const toolbar = figma.createFrame();
     toolbar.name = 'Toolbar';
     toolbar.layoutMode = 'HORIZONTAL';
-    toolbar.primaryAxisSizingMode = 'FIXED';
-    toolbar.counterAxisSizingMode = 'AUTO';
-    toolbar.primaryAxisAlignItems = 'SPACE_BETWEEN';
-    toolbar.counterAxisAlignItems = 'CENTER';
     toolbar.itemSpacing = 12;
-    toolbar.paddingLeft = toolbar.paddingRight = cellPadX;
-    toolbar.paddingTop = toolbar.paddingBottom = isCompact ? 10 : 12;
+    toolbar.paddingLeft = toolbar.paddingRight = 20;
+    toolbar.paddingTop = toolbar.paddingBottom = 16;
+    toolbar.counterAxisAlignItems = 'CENTER';
     toolbar.fills = [paintForVar(dt('toolbar/bg'))];
     toolbar.strokes = [paintForVar(dt('toolbar/border'))];
-    toolbar.strokeWeight = 1;
-    toolbar.strokeAlign = 'INSIDE';
     toolbar.strokeBottomWeight = 1;
     toolbar.strokeTopWeight = toolbar.strokeLeftWeight = toolbar.strokeRightWeight = 0;
+    toolbar.strokeAlign = 'INSIDE';
     comp.appendChild(toolbar);
-    try { toolbar.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    try { toolbar.layoutSizingHorizontal = 'FILL'; toolbar.layoutSizingVertical = 'HUG'; } catch (e) {}
 
-    const tbLeft = figma.createFrame();
-    tbLeft.layoutMode = 'HORIZONTAL';
-    tbLeft.primaryAxisSizingMode = 'AUTO';
-    tbLeft.counterAxisSizingMode = 'AUTO';
-    tbLeft.counterAxisAlignItems = 'CENTER';
-    tbLeft.itemSpacing = 6;
-    tbLeft.fills = [];
-    toolbar.appendChild(tbLeft);
-    const tbTitle = figma.createText();
-    const tbts = styleByName['Heading/H5'];
-    if (tbts) await tbTitle.setTextStyleIdAsync(tbts.id);
-    tbTitle.characters = 'Team members';
-    tbTitle.fills = [paintForVar(dt('toolbar/text'))];
-    tbLeft.appendChild(tbTitle);
-    const tbCount = figma.createText();
-    const tbcs = styleByName['Body/Small'];
-    if (tbcs) await tbCount.setTextStyleIdAsync(tbcs.id);
-    tbCount.characters = `· ${SAMPLE_ROWS.length} total`;
-    tbCount.fills = [paintForVar(dt('toolbar/text/muted'))];
-    tbLeft.appendChild(tbCount);
+    // Title cluster
+    const titleCluster = figma.createFrame();
+    titleCluster.layoutMode = 'HORIZONTAL';
+    titleCluster.itemSpacing = 8;
+    titleCluster.fills = [];
+    titleCluster.counterAxisAlignItems = 'CENTER';
+    toolbar.appendChild(titleCluster);
+    try { titleCluster.layoutSizingHorizontal = 'HUG'; titleCluster.layoutSizingVertical = 'HUG'; } catch (e) {}
+    titleCluster.appendChild(await makeText('Team members', 'Heading/H5', dt('toolbar/text')));
+    titleCluster.appendChild(await makeText(`· ${SAMPLE.length} total`, 'Body/Small', dt('toolbar/text/muted')));
 
-    const tbRight = figma.createFrame();
-    tbRight.layoutMode = 'HORIZONTAL';
-    tbRight.primaryAxisSizingMode = 'AUTO';
-    tbRight.counterAxisSizingMode = 'AUTO';
-    tbRight.counterAxisAlignItems = 'CENTER';
-    tbRight.itemSpacing = 8;
-    tbRight.fills = [];
-    toolbar.appendChild(tbRight);
-    const sb = findSearchBar(isCompact ? 'Small' : 'Default');
-    if (sb) {
-      const sbI = sb.createInstance();
-      tbRight.appendChild(sbI);
-      try { sbI.resize(220, sbI.height); } catch (e) {}
-    }
-    const addBtn = findButton('Primary', isCompact ? 'Small' : 'Default');
-    if (addBtn) {
-      const inst = addBtn.createInstance();
-      tbRight.appendChild(inst);
-      await setText(inst, 'Add member');
+    // Spacer
+    const spacer = figma.createFrame();
+    spacer.layoutMode = 'NONE';
+    spacer.fills = [];
+    toolbar.appendChild(spacer);
+    try { spacer.layoutSizingHorizontal = 'FILL'; spacer.layoutSizingVertical = 'FIXED'; } catch (e) {}
+    spacer.resize(spacer.width, 1);
+
+    // SearchBar
+    if (searchBarSet) {
+      const sbVariant = searchBarSet.children.find(c => /Size=Default/.test(c.name) && /State=Default/.test(c.name)) || searchBarSet.children[0];
+      const sbInst = sbVariant.createInstance();
+      toolbar.appendChild(sbInst);
+      try { sbInst.resize(280, sbInst.height); } catch (e) {}
     }
 
-    // ---- Header row -------------------------------------------------------
-    const cols = [
-      { key: 'name',   label: 'Name',   w: hasSelection ? 320 : 360 },
-      { key: 'email',  label: 'Email',  w: 280 },
-      { key: 'role',   label: 'Role',   w: 140 },
-      { key: 'status', label: 'Status', w: 140 },
-      { key: 'menu',   label: '',       w: 56 },
-    ];
-    const usableW = WIDTH - 2; // borders inside
-    const selW = hasSelection ? 48 : 0;
-    // Adjust last col to fill remaining width
-    const totalCols = cols.reduce((s, c) => s + c.w, 0);
-    const remaining = usableW - selW - totalCols;
-    if (remaining !== 0) cols[1].w += remaining;
+    // Add member button
+    if (buttonSet) {
+      const btnVariant = pickVariant(buttonSet, [/Variant=Primary/, /Size=Default/, /State=Default/, /Type=Default/]) ||
+                        pickVariant(buttonSet, [/Variant=Primary/, /Size=Default/, /State=Default/]) ||
+                        pickVariant(buttonSet, [/Variant=Primary/]);
+      if (btnVariant) {
+        const btnInst = btnVariant.createInstance();
+        toolbar.appendChild(btnInst);
+        const btnText = btnInst.findOne(n => n.type === 'TEXT');
+        if (btnText) { try { await figma.loadFontAsync(btnText.fontName); btnText.characters = 'Add member'; } catch (e) {} }
+      }
+    }
 
+    // ---- Header row ------------------------------------------------------
     const headerRow = figma.createFrame();
     headerRow.name = 'Header';
     headerRow.layoutMode = 'HORIZONTAL';
-    headerRow.primaryAxisSizingMode = 'FIXED';
-    headerRow.counterAxisSizingMode = 'FIXED';
-    headerRow.counterAxisAlignItems = 'CENTER';
     headerRow.itemSpacing = 0;
-    headerRow.fills = [paintForVar(dt('header/bg'))];
-    headerRow.strokes = [paintForVar(dt('header/border'))];
-    headerRow.strokeWeight = 1;
-    headerRow.strokeAlign = 'INSIDE';
-    headerRow.strokeBottomWeight = 1;
-    headerRow.strokeTopWeight = headerRow.strokeLeftWeight = headerRow.strokeRightWeight = 0;
+    headerRow.paddingLeft = headerRow.paddingRight = 0;
+    headerRow.fills = [];
     comp.appendChild(headerRow);
-    try { headerRow.layoutSizingHorizontal = 'FILL'; } catch (e) {}
-    headerRow.resize(WIDTH, HEAD_H);
+    try { headerRow.layoutSizingHorizontal = 'FILL'; headerRow.layoutSizingVertical = 'HUG'; } catch (e) {}
 
-    if (hasSelection) {
-      const selCell = figma.createFrame();
-      selCell.layoutMode = 'HORIZONTAL';
-      selCell.primaryAxisAlignItems = 'CENTER';
-      selCell.counterAxisAlignItems = 'CENTER';
-      selCell.primaryAxisSizingMode = 'FIXED';
-      selCell.counterAxisSizingMode = 'FIXED';
-      selCell.resize(selW, HEAD_H);
-      selCell.fills = [];
-      headerRow.appendChild(selCell);
-      const cbV = findCheckbox('Unchecked', 'Default');
-      if (cbV) selCell.appendChild(cbV.createInstance());
+    // Selection column header (checkbox)
+    if (isWithSelection && checkboxSet) {
+      const selHeaderCell = figma.createFrame();
+      selHeaderCell.layoutMode = 'HORIZONTAL';
+      selHeaderCell.primaryAxisAlignItems = 'CENTER';
+      selHeaderCell.counterAxisAlignItems = 'CENTER';
+      selHeaderCell.paddingLeft = selHeaderCell.paddingRight = 16;
+      selHeaderCell.paddingTop = selHeaderCell.paddingBottom = 10;
+      selHeaderCell.fills = [];
+      selHeaderCell.strokes = [paintForVar(dt('footer/border'))];
+      selHeaderCell.strokeBottomWeight = 1;
+      selHeaderCell.strokeTopWeight = selHeaderCell.strokeLeftWeight = selHeaderCell.strokeRightWeight = 0;
+      selHeaderCell.strokeAlign = 'INSIDE';
+      selHeaderCell.resize(56, 44);
+      selHeaderCell.primaryAxisSizingMode = 'FIXED';
+      selHeaderCell.counterAxisSizingMode = 'AUTO';
+      headerRow.appendChild(selHeaderCell);
+      const cb = pickVariant(checkboxSet, [/Checked=Unchecked/, /State=Default/, /Size=Small/, /Content=No Label/]);
+      if (cb) selHeaderCell.appendChild(cb.createInstance());
     }
 
-    for (const col of cols) {
-      const cell = figma.createFrame();
-      cell.name = `H · ${col.label || 'menu'}`;
-      cell.layoutMode = 'HORIZONTAL';
-      cell.primaryAxisSizingMode = 'FIXED';
-      cell.counterAxisSizingMode = 'FIXED';
-      cell.counterAxisAlignItems = 'CENTER';
-      cell.paddingLeft = cell.paddingRight = cellPadX;
-      cell.itemSpacing = 4;
-      cell.fills = [];
-      cell.resize(col.w, HEAD_H);
-      headerRow.appendChild(cell);
-      if (col.label) {
-        const tx = figma.createText();
-        const hs = styleByName['Label/Default'];
-        if (hs) await tx.setTextStyleIdAsync(hs.id);
-        tx.characters = col.label;
-        tx.fills = [paintForVar(dt('header/text'))];
-        cell.appendChild(tx);
+    // 3 header columns: Name, Email, Role, Status (we'll do Name, Role, Status to match Row's 3 cells)
+    const HEADERS = ['Name', 'Role', 'Status'];
+    if (tableHeaderCellSet) {
+      for (const h of HEADERS) {
+        const variant = tableHeaderCellSet.children.find(c => /Sort=None/.test(c.name) && /Align=Left/.test(c.name) && /State=Default/.test(c.name)) ||
+                        tableHeaderCellSet.children[0];
+        const inst = variant.createInstance();
+        headerRow.appendChild(inst);
+        try { inst.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+        const t = inst.findOne(n => n.type === 'TEXT');
+        if (t) { try { await figma.loadFontAsync(t.fontName); t.characters = h; } catch (e) {} }
       }
     }
 
     // ---- Body rows --------------------------------------------------------
-    for (let i = 0; i < SAMPLE_ROWS.length; i++) {
-      const r = SAMPLE_ROWS[i];
-      const isSelected = hasSelection && i === 1; // sample selected row
-      const row = figma.createFrame();
-      row.name = `Row ${i + 1}`;
-      row.layoutMode = 'HORIZONTAL';
-      row.primaryAxisSizingMode = 'FIXED';
-      row.counterAxisSizingMode = 'FIXED';
-      row.counterAxisAlignItems = 'CENTER';
-      row.itemSpacing = 0;
-      row.fills = [paintForVar(isSelected ? dt('row/bg/selected') : dt('row/bg/default'))];
-      row.strokes = [paintForVar(dt('row/border'))];
-      row.strokeWeight = 1;
-      row.strokeAlign = 'INSIDE';
-      row.strokeBottomWeight = i === SAMPLE_ROWS.length - 1 ? 0 : 1;
-      row.strokeTopWeight = row.strokeLeftWeight = row.strokeRightWeight = 0;
-      comp.appendChild(row);
-      try { row.layoutSizingHorizontal = 'FILL'; } catch (e) {}
-      row.resize(WIDTH, ROW_H);
+    const body = figma.createFrame();
+    body.name = 'Body';
+    body.layoutMode = 'VERTICAL';
+    body.itemSpacing = 0;
+    body.fills = [];
+    comp.appendChild(body);
+    try { body.layoutSizingHorizontal = 'FILL'; body.layoutSizingVertical = 'HUG'; } catch (e) {}
 
-      if (hasSelection) {
-        const selCell = figma.createFrame();
-        selCell.layoutMode = 'HORIZONTAL';
-        selCell.primaryAxisAlignItems = 'CENTER';
-        selCell.counterAxisAlignItems = 'CENTER';
-        selCell.primaryAxisSizingMode = 'FIXED';
-        selCell.counterAxisSizingMode = 'FIXED';
-        selCell.resize(selW, ROW_H);
-        selCell.fills = [];
-        row.appendChild(selCell);
-        const cbV = findCheckbox(isSelected ? 'Checked' : 'Unchecked', 'Default');
-        if (cbV) selCell.appendChild(cbV.createInstance());
+    if (isLoading) {
+      // Loading state: 5 rows of skeleton bars
+      for (let i = 0; i < 5; i++) {
+        const skelRow = figma.createFrame();
+        skelRow.layoutMode = 'HORIZONTAL';
+        skelRow.itemSpacing = 16;
+        skelRow.paddingLeft = skelRow.paddingRight = 16;
+        skelRow.paddingTop = skelRow.paddingBottom = 14;
+        skelRow.counterAxisAlignItems = 'CENTER';
+        skelRow.fills = [];
+        skelRow.strokes = [paintForVar(dt('footer/border'))];
+        skelRow.strokeBottomWeight = 1;
+        skelRow.strokeTopWeight = skelRow.strokeLeftWeight = skelRow.strokeRightWeight = 0;
+        skelRow.strokeAlign = 'INSIDE';
+        body.appendChild(skelRow);
+        try { skelRow.layoutSizingHorizontal = 'FILL'; skelRow.layoutSizingVertical = 'HUG'; } catch (e) {}
+        for (let j = 0; j < 3; j++) {
+          const bar = figma.createRectangle();
+          bar.cornerRadius = 4;
+          bar.fills = [paintForVar(required['state/disabled-bg'])];
+          bar.resize(120 + j * 40, 12);
+          skelRow.appendChild(bar);
+        }
       }
-
-      // Name cell — avatar + text
-      const nameCell = figma.createFrame();
-      nameCell.layoutMode = 'HORIZONTAL';
-      nameCell.primaryAxisSizingMode = 'FIXED';
-      nameCell.counterAxisSizingMode = 'FIXED';
-      nameCell.counterAxisAlignItems = 'CENTER';
-      nameCell.paddingLeft = nameCell.paddingRight = cellPadX;
-      nameCell.itemSpacing = 10;
-      nameCell.fills = [];
-      nameCell.resize(cols[0].w, ROW_H);
-      row.appendChild(nameCell);
-      const avV = findAvatar(isCompact ? 'XS' : 'Small');
-      if (avV) nameCell.appendChild(avV.createInstance());
-      const nameTx = figma.createText();
-      const nbs = styleByName['Body/Default'];
-      if (nbs) await nameTx.setTextStyleIdAsync(nbs.id);
-      nameTx.characters = r.name;
-      nameTx.fills = [paintForVar(dt('cell/text'))];
-      nameCell.appendChild(nameTx);
-
-      // Email cell
-      const emailCell = figma.createFrame();
-      emailCell.layoutMode = 'HORIZONTAL';
-      emailCell.primaryAxisSizingMode = 'FIXED';
-      emailCell.counterAxisSizingMode = 'FIXED';
-      emailCell.counterAxisAlignItems = 'CENTER';
-      emailCell.paddingLeft = emailCell.paddingRight = cellPadX;
-      emailCell.fills = [];
-      emailCell.resize(cols[1].w, ROW_H);
-      row.appendChild(emailCell);
-      const emTx = figma.createText();
-      const ems = styleByName['Body/Default'];
-      if (ems) await emTx.setTextStyleIdAsync(ems.id);
-      emTx.characters = r.email;
-      emTx.fills = [paintForVar(dt('cell/text/secondary'))];
-      emailCell.appendChild(emTx);
-
-      // Role cell
-      const roleCell = figma.createFrame();
-      roleCell.layoutMode = 'HORIZONTAL';
-      roleCell.primaryAxisSizingMode = 'FIXED';
-      roleCell.counterAxisSizingMode = 'FIXED';
-      roleCell.counterAxisAlignItems = 'CENTER';
-      roleCell.paddingLeft = roleCell.paddingRight = cellPadX;
-      roleCell.fills = [];
-      roleCell.resize(cols[2].w, ROW_H);
-      row.appendChild(roleCell);
-      const rlTx = figma.createText();
-      const rls = styleByName['Body/Default'];
-      if (rls) await rlTx.setTextStyleIdAsync(rls.id);
-      rlTx.characters = r.role;
-      rlTx.fills = [paintForVar(dt('cell/text'))];
-      roleCell.appendChild(rlTx);
-
-      // Status cell — Badge instance
-      const statusCell = figma.createFrame();
-      statusCell.layoutMode = 'HORIZONTAL';
-      statusCell.primaryAxisSizingMode = 'FIXED';
-      statusCell.counterAxisSizingMode = 'FIXED';
-      statusCell.counterAxisAlignItems = 'CENTER';
-      statusCell.paddingLeft = statusCell.paddingRight = cellPadX;
-      statusCell.fills = [];
-      statusCell.resize(cols[3].w, ROW_H);
-      row.appendChild(statusCell);
-      const bgV = findBadge(r.status);
-      if (bgV) {
-        const bi = bgV.createInstance();
-        statusCell.appendChild(bi);
-        await setText(bi, r.status === 'Success' ? 'Active' : r.status === 'Info' ? 'Pending' : r.status === 'Warning' ? 'Idle' : 'Suspended');
+    } else if (isEmpty) {
+      const emptyFrame = figma.createFrame();
+      emptyFrame.layoutMode = 'VERTICAL';
+      emptyFrame.itemSpacing = 8;
+      emptyFrame.primaryAxisAlignItems = 'CENTER';
+      emptyFrame.counterAxisAlignItems = 'CENTER';
+      emptyFrame.paddingTop = emptyFrame.paddingBottom = 64;
+      emptyFrame.paddingLeft = emptyFrame.paddingRight = 32;
+      emptyFrame.fills = [];
+      body.appendChild(emptyFrame);
+      try { emptyFrame.layoutSizingHorizontal = 'FILL'; emptyFrame.layoutSizingVertical = 'HUG'; } catch (e) {}
+      emptyFrame.appendChild(await makeText('No team members yet', 'Heading/H5', dt('toolbar/text')));
+      emptyFrame.appendChild(await makeText('Add your first member to get started.', 'Body/Default', dt('toolbar/text/muted')));
+      if (buttonSet) {
+        const btnVariant = pickVariant(buttonSet, [/Variant=Primary/, /Size=Default/, /State=Default/]);
+        if (btnVariant) {
+          const btnInst = btnVariant.createInstance();
+          emptyFrame.appendChild(btnInst);
+          const btnText = btnInst.findOne(n => n.type === 'TEXT');
+          if (btnText) { try { await figma.loadFontAsync(btnText.fontName); btnText.characters = 'Add member'; } catch (e) {} }
+        }
       }
+    } else {
+      // Default: 5 rows. First row = Default, second = Hover or Selected (to demo states), rest = Default.
+      // For With-Selection layout, we'll show one row Selected.
+      const rowStates = isWithSelection
+        ? ['Default', 'Selected', 'Default', 'Default', 'Default']
+        : ['Default', 'Default', 'Default', 'Default', 'Default'];
+      for (let i = 0; i < SAMPLE.length; i++) {
+        // Wrapper row that may include the selection cell + the row instance
+        const wrapper = figma.createFrame();
+        wrapper.layoutMode = 'HORIZONTAL';
+        wrapper.itemSpacing = 0;
+        wrapper.fills = [];
+        body.appendChild(wrapper);
+        try { wrapper.layoutSizingHorizontal = 'FILL'; wrapper.layoutSizingVertical = 'HUG'; } catch (e) {}
 
-      // Menu cell — IconButton
-      const menuCell = figma.createFrame();
-      menuCell.layoutMode = 'HORIZONTAL';
-      menuCell.primaryAxisAlignItems = 'CENTER';
-      menuCell.counterAxisAlignItems = 'CENTER';
-      menuCell.primaryAxisSizingMode = 'FIXED';
-      menuCell.counterAxisSizingMode = 'FIXED';
-      menuCell.resize(cols[4].w, ROW_H);
-      menuCell.fills = [];
-      row.appendChild(menuCell);
-      const ibV = findIconBtn(isCompact ? 'Small' : 'Default');
-      if (ibV) menuCell.appendChild(ibV.createInstance());
+        if (isWithSelection && checkboxSet) {
+          const selCell = figma.createFrame();
+          selCell.layoutMode = 'HORIZONTAL';
+          selCell.primaryAxisAlignItems = 'CENTER';
+          selCell.counterAxisAlignItems = 'CENTER';
+          selCell.paddingLeft = selCell.paddingRight = 16;
+          selCell.paddingTop = selCell.paddingBottom = 12;
+          selCell.fills = rowStates[i] === 'Selected'
+            ? [paintForVar(required['brand/primary-subtle'])]
+            : [];
+          selCell.strokes = [paintForVar(dt('footer/border'))];
+          selCell.strokeBottomWeight = 1;
+          selCell.strokeTopWeight = selCell.strokeLeftWeight = selCell.strokeRightWeight = 0;
+          selCell.strokeAlign = 'INSIDE';
+          selCell.resize(56, 1);
+          selCell.primaryAxisSizingMode = 'FIXED';
+          selCell.counterAxisSizingMode = 'AUTO';
+          wrapper.appendChild(selCell);
+          const isSelected = rowStates[i] === 'Selected';
+          const cb = pickVariant(checkboxSet, [
+            new RegExp(`Checked=${isSelected ? 'Checked' : 'Unchecked'}`),
+            /State=Default/, /Size=Small/, /Content=No Label/,
+          ]);
+          if (cb) selCell.appendChild(cb.createInstance());
+        }
+
+        const rowInst = await buildSampleRow(SAMPLE[i], rowStates[i], isWithSelection);
+        if (rowInst) {
+          wrapper.appendChild(rowInst);
+          try { rowInst.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+        }
+      }
     }
 
-    // ---- Footer (pagination) ---------------------------------------------
+    // ---- Footer ----------------------------------------------------------
     const footer = figma.createFrame();
     footer.name = 'Footer';
     footer.layoutMode = 'HORIZONTAL';
-    footer.primaryAxisSizingMode = 'FIXED';
-    footer.counterAxisSizingMode = 'AUTO';
-    footer.primaryAxisAlignItems = 'SPACE_BETWEEN';
-    footer.counterAxisAlignItems = 'CENTER';
     footer.itemSpacing = 12;
-    footer.paddingLeft = footer.paddingRight = cellPadX;
-    footer.paddingTop = footer.paddingBottom = isCompact ? 8 : 12;
+    footer.paddingLeft = footer.paddingRight = 20;
+    footer.paddingTop = footer.paddingBottom = 14;
+    footer.counterAxisAlignItems = 'CENTER';
     footer.fills = [paintForVar(dt('footer/bg'))];
     footer.strokes = [paintForVar(dt('footer/border'))];
-    footer.strokeWeight = 1;
-    footer.strokeAlign = 'INSIDE';
     footer.strokeTopWeight = 1;
     footer.strokeBottomWeight = footer.strokeLeftWeight = footer.strokeRightWeight = 0;
+    footer.strokeAlign = 'INSIDE';
     comp.appendChild(footer);
-    try { footer.layoutSizingHorizontal = 'FILL'; } catch (e) {}
+    try { footer.layoutSizingHorizontal = 'FILL'; footer.layoutSizingVertical = 'HUG'; } catch (e) {}
 
-    const ftLeft = figma.createText();
-    const fls = styleByName['Body/Small'];
-    if (fls) await ftLeft.setTextStyleIdAsync(fls.id);
-    ftLeft.characters = `Showing 1–${SAMPLE_ROWS.length} of ${SAMPLE_ROWS.length}`;
-    ftLeft.fills = [paintForVar(dt('footer/text'))];
-    footer.appendChild(ftLeft);
+    footer.appendChild(await makeText(
+      isEmpty ? 'No results' : `Showing 1–${SAMPLE.length} of ${SAMPLE.length}`,
+      'Body/Small', dt('footer/text')
+    ));
+    const fSpacer = figma.createFrame();
+    fSpacer.layoutMode = 'NONE';
+    fSpacer.fills = [];
+    footer.appendChild(fSpacer);
+    try { fSpacer.layoutSizingHorizontal = 'FILL'; fSpacer.layoutSizingVertical = 'FIXED'; } catch (e) {}
+    fSpacer.resize(fSpacer.width, 1);
 
-    const pgV = findPagination();
-    if (pgV) footer.appendChild(pgV.createInstance());
+    if (paginationSet && !isEmpty) {
+      const pagVariant = paginationSet.children.find(c => /Size=Default/.test(c.name) && /State=Default/.test(c.name)) || paginationSet.children[0];
+      if (pagVariant) footer.appendChild(pagVariant.createInstance());
+    }
 
     return comp;
   }
 
+  // ---- Build all variants ----------------------------------------------------
   const LAYOUTS = ['Default', 'With-Selection'];
-  const DENSITIES = ['Default', 'Compact'];
+  const STATES = ['Default', 'Loading', 'Empty'];
   const variants = [];
-  const grid = {};
-  for (const l of LAYOUTS) {
-    grid[l] = {};
-    for (const d of DENSITIES) {
-      const v = await buildVariant(l, d);
-      variants.push(v);
-      grid[l][d] = v;
+  for (const layout of LAYOUTS) {
+    for (const state of STATES) {
+      variants.push(await buildOneTable(layout, state));
     }
   }
 
   const compSet = figma.combineAsVariants(variants, organismsPage);
   compSet.name = 'Data Table';
-  compSet.layoutMode = 'NONE';
-  compSet.fills = [paintForVar(dt('surface'))];
-  compSet.strokes = [paintForVar(dt('border/outer'))];
-  compSet.strokeWeight = 1;
+  compSet.layoutMode = 'VERTICAL';
+  compSet.itemSpacing = 32;
+  compSet.counterAxisSpacing = 32;
+  compSet.paddingLeft = compSet.paddingRight = 48;
+  compSet.paddingTop = compSet.paddingBottom = 48;
   compSet.cornerRadius = 16;
+  compSet.fills = [paintForVar(required['surface/card'])];
+  compSet.strokes = [paintForVar(required['border/default'])];
+  compSet.strokeWeight = 1;
 
-  const PAD_TOP = 100, PAD_LEFT = 200, PAD_RIGHT = 40, PAD_BOT = 40;
-  const COL_GAP = 64, ROW_GAP = 64;
+  // Wrap compSet inside a showcase frame with title + usage hint
+  const showcase = figma.createFrame();
+  showcase.name = 'Data Table — Showcase';
+  showcase.layoutMode = 'VERTICAL';
+  showcase.itemSpacing = 32;
+  showcase.paddingLeft = showcase.paddingRight = 64;
+  showcase.paddingTop = showcase.paddingBottom = 64;
+  showcase.cornerRadius = 16;
+  showcase.fills = [paintForVar(required['surface/base'])];
+  organismsPage.appendChild(showcase);
+  showcase.resize(TABLE_W + 64 * 2 + 96, 1);
+  showcase.primaryAxisSizingMode = 'AUTO';
+  showcase.counterAxisSizingMode = 'FIXED';
 
-  const colW = {};
-  for (const d of DENSITIES) {
-    let m = 0;
-    for (const l of LAYOUTS) if (grid[l][d].width > m) m = grid[l][d].width;
-    colW[d] = m;
-  }
-  const colX = {}; let cx = PAD_LEFT;
-  for (const d of DENSITIES) { colX[d] = cx; cx += colW[d] + COL_GAP; }
-  const rowH = {};
-  for (const l of LAYOUTS) {
-    let m = 0;
-    for (const d of DENSITIES) if (grid[l][d].height > m) m = grid[l][d].height;
-    rowH[l] = m;
-  }
-  const rowY = {}; let cy = PAD_TOP;
-  for (const l of LAYOUTS) { rowY[l] = cy; cy += rowH[l] + ROW_GAP; }
+  const head = figma.createFrame();
+  head.layoutMode = 'VERTICAL';
+  head.itemSpacing = 6;
+  head.fills = [];
+  showcase.appendChild(head);
+  try { head.layoutSizingHorizontal = 'FILL'; head.layoutSizingVertical = 'HUG'; } catch (e) {}
+  head.appendChild(await makeText('Data Table', 'Display/L', required['text/primary']));
+  const subtitle = await makeText(
+    'Modular table — composes Table Row + Table Header Cell + Table Cell instances. Click any row in an instance to change its State (Default / Hover / Selected / Disabled / Pressed / Focused / Error / Warning) from the design panel. Swap individual cell instances to customize columns. Variants: Layout (Default / With-Selection) × State (Default / Loading / Empty).',
+    'Body/Default', required['text/secondary']
+  );
+  head.appendChild(subtitle);
+  try { subtitle.layoutSizingHorizontal = 'FILL'; subtitle.textAutoResize = 'HEIGHT'; } catch (e) {}
 
-  for (const l of LAYOUTS) for (const d of DENSITIES) {
-    grid[l][d].x = colX[d];
-    grid[l][d].y = rowY[l];
-  }
-  compSet.resize(cx - COL_GAP + PAD_RIGHT, cy - ROW_GAP + PAD_BOT);
-  autoPositionBelow(organismsPage, compSet, 120);
+  showcase.appendChild(compSet);
+  try { compSet.layoutSizingHorizontal = 'HUG'; compSet.layoutSizingVertical = 'HUG'; } catch (e) {}
 
-  const colGroups = [{
-    name: 'Density', x: PAD_LEFT, width: cx - COL_GAP - PAD_LEFT,
-    sizes: DENSITIES.map(d => ({ name: d, x: colX[d], width: colW[d] })),
-  }];
-  const rowGroups = LAYOUTS.map(l => ({
-    name: l, y: rowY[l],
-    states: [{ name: '', y: rowY[l], height: rowH[l] }],
-  }));
-  await decorateComponentSet({
-    page: organismsPage, compSet, colGroups, rowGroups,
-    padTop: PAD_TOP, padLeft: PAD_LEFT,
-    labelStyle: styleByName['Label/Default'], sectionStyle: styleByName['Heading/H4'],
-    labelPrimaryVar: required['text/primary'], labelSecondaryVar: required['text/secondary'],
-    componentName: 'Data Table',
-    surfaceVar: required['surface/card'], borderVar: required['border/default'],
-  });
+  autoPositionBelow(organismsPage, showcase, 200);
 
   console.log(`[OM DS] Data Table variants built: ${variants.length}`);
-  figma.notify(`✅ Data Table: ${variants.length} variants (Layout × Density).`);
+  figma.notify(`✅ Data Table: ${variants.length} variants (Layout × State).`);
 }
 
 // =============================================================================
